@@ -192,10 +192,7 @@ fn build_balance_request(account: &DevnetAccount) -> Value {
 }
 
 fn parse_balance_response(response: &Value) -> Result<u64, &'static str> {
-    if response
-        .get("error")
-        .is_some_and(|error| !error.is_null())
-    {
+    if response.get("error").is_some_and(|error| !error.is_null()) {
         return Err("Devnet RPC request was rejected");
     }
 
