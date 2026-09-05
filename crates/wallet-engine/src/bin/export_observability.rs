@@ -114,8 +114,7 @@ mod tests {
     }
 
     #[test]
-    fn temporary_snapshot_stays_next_to_final_snapshot(
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    fn temporary_snapshot_stays_next_to_final_snapshot() -> Result<(), Box<dyn std::error::Error>> {
         let path = PathBuf::from("dashboard/wallet-observability.json");
         let temporary_path = temporary_snapshot_path(&path)?;
 
