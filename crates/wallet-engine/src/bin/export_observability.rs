@@ -1,8 +1,6 @@
 use std::{env, error::Error, fs};
 
-use wallet_engine::{
-    observability::WalletObservabilitySnapshot, LockedVault, SecretPassphrase,
-};
+use wallet_engine::{observability::WalletObservabilitySnapshot, LockedVault, SecretPassphrase};
 
 const VAULT_PATH_ENV: &str = "SCOUT_WALLET_VAULT_PATH";
 const PASSPHRASE_ENV: &str = "SCOUT_WALLET_PASSPHRASE";
