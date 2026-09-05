@@ -501,6 +501,60 @@ impl<'a> AuthorizedTransactionMessage<'a> {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PreparedTransactionError {
+    Message(TransactionMessageError),
+    Ledger(LedgerError),
+}
+
+impl fmt::Display for PreparedTransactionError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Message(error) => error.fmt(formatter),
+            Self::Ledger(error) => error.fmt(formatter),
+        }
+    }
+}
+
+impl std::error::Error for PreparedTransactionError {}
+
+pub struct PreparedTransaction {
+    message: CanonicalTransactionMessage,
+    ledger: TransactionLedgerEntry,
+}
+
+impl PreparedTransaction {
+    pub fn reserve(
+        instructions: &[Instruction],
+        payer: Pubkey,
+        reserved_lamports: u64,
+        lease: BlockhashLease,
+    ) -> Result<Self, PreparedTransactionError> {
+        let recent_blockhash = lease.recent_blockhash();
+        let message = CanonicalTransactionMessage::new(instructions, payer, recent_blockhash)
+            .map_err(PreparedTransactionError::Message)?;
+        let ledger = TransactionLedgerEntry::reserve(reserved_lamports, lease)
+            .map_err(PreparedTransactionError::Ledger)?;
+
+        Ok(Self { message, ledger })
+    }
+
+    #[must_use]
+    pub fn message(&self) -> &CanonicalTransactionMessage {
+        &self.message
+    }
+
+    #[must_use]
+    pub const fn ledger(&self) -> &TransactionLedgerEntry {
+        &self.ledger
+    }
+
+    #[must_use]
+    pub fn ledger_mut(&mut self) -> &mut TransactionLedgerEntry {
+        &mut self.ledger
+    }
+}
+
 pub struct SecretPassphrase {
     value: Zeroizing<String>,
 }
@@ -1072,14 +1126,16 @@ mod tests {
         build_get_latest_blockhash_request, parse_block_height_response,
         parse_latest_blockhash_response, AuthorizedMessage, AuthorizedTransactionMessage,
         BlockhashLease, CanonicalTransactionMessage, Cluster, GetBlockHeightResponse,
-        GetLatestBlockhashResponse, LedgerError, LockedVault, RpcError, SecretPassphrase,
-        SecretSeed, SignatureBytes, SignerError, TransactionLedgerEntry, TransactionMessageError,
-        TransactionState, VaultError, CIPHERTEXT_LEN, VAULT_VERSION,
+        GetLatestBlockhashResponse, LedgerError, LockedVault, PreparedTransaction,
+        PreparedTransactionError, RpcError, SecretPassphrase, SecretSeed, SignatureBytes,
+        SignerError, TransactionLedgerEntry, TransactionMessageError, TransactionState, VaultError,
+        CIPHERTEXT_LEN, VAULT_VERSION,
     };
     use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
     use ed25519_dalek::{Signature, Verifier as _, VerifyingKey};
     use solana_hash::Hash;
     use solana_instruction::Instruction;
+    use solana_message::Message;
     use solana_pubkey::Pubkey;
 
     fn test_lease(
@@ -1404,6 +1460,70 @@ mod tests {
 
         assert!(verifying_key.verify(canonical.bytes(), &signature).is_ok());
         Ok(())
+    }
+
+    #[test]
+    fn prepared_transaction_binds_message_and_ledger_to_same_blockhash(
+    ) -> Result<(), PreparedTransactionError> {
+        let payer = Pubkey::new_from_array([104_u8; 32]);
+        let program_id = Pubkey::new_from_array([105_u8; 32]);
+        let blockhash = Hash::new_from_array([106_u8; 32]);
+        let instruction = Instruction {
+            program_id,
+            accounts: Vec::new(),
+            data: vec![1_u8, 3_u8, 5_u8],
+        };
+        let lease = test_lease(blockhash, 600, 590);
+        let prepared =
+            PreparedTransaction::reserve(&[instruction], payer, 500_000_000, lease)?;
+
+        let decoded: Message = bincode::deserialize(prepared.message().bytes())
+            .map_err(|_| PreparedTransactionError::Message(
+                TransactionMessageError::SerializationFailed,
+            ))?;
+
+        assert_eq!(decoded.recent_blockhash, blockhash);
+        assert_eq!(prepared.ledger().recent_blockhash(), blockhash);
+        assert_eq!(prepared.ledger().last_valid_block_height(), 600);
+        assert_eq!(prepared.ledger().reserved_lamports(), 500_000_000);
+        assert_eq!(prepared.ledger().state(), TransactionState::Reserved);
+        Ok(())
+    }
+
+    #[test]
+    fn prepared_transaction_rejects_empty_instructions_before_reservation() {
+        let payer = Pubkey::new_from_array([106_u8; 32]);
+        let blockhash = Hash::new_from_array([107_u8; 32]);
+        let lease = test_lease(blockhash, 600, 590);
+        let result = PreparedTransaction::reserve(&[], payer, 500_000_000, lease);
+
+        assert!(matches!(
+            result,
+            Err(PreparedTransactionError::Message(
+                TransactionMessageError::EmptyInstructions
+            ))
+        ));
+    }
+
+    #[test]
+    fn prepared_transaction_rejects_zero_reservation() {
+        let payer = Pubkey::new_from_array([107_u8; 32]);
+        let program_id = Pubkey::new_from_array([108_u8; 32]);
+        let blockhash = Hash::new_from_array([109_u8; 32]);
+        let instruction = Instruction {
+            program_id,
+            accounts: Vec::new(),
+            data: vec![2_u8, 4_u8, 6_u8],
+        };
+        let lease = test_lease(blockhash, 600, 590);
+        let result = PreparedTransaction::reserve(&[instruction], payer, 0, lease);
+
+        assert!(matches!(
+            result,
+            Err(PreparedTransactionError::Ledger(
+                LedgerError::ZeroReservation
+            ))
+        ));
     }
 
     #[test]
