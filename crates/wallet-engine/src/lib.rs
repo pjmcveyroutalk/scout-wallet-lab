@@ -6,7 +6,7 @@ use chacha20poly1305::{
     aead::{Aead, Payload},
     KeyInit, XChaCha20Poly1305, XNonce,
 };
-use ed25519_dalek::SigningKey;
+use ed25519_dalek::{Signer as _, SigningKey};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use zeroize::{Zeroize, Zeroizing};
@@ -17,6 +17,7 @@ const SALT_LEN: usize = 16;
 const NONCE_LEN: usize = 24;
 const SEED_LEN: usize = 32;
 const KEY_LEN: usize = 32;
+const SIGNATURE_LEN: usize = 64;
 const AEAD_TAG_LEN: usize = 16;
 const CIPHERTEXT_LEN: usize = SEED_LEN + AEAD_TAG_LEN;
 
@@ -93,6 +94,21 @@ impl fmt::Display for VaultError {
 
 impl std::error::Error for VaultError {}
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SignerError {
+    EmptyMessage,
+}
+
+impl fmt::Display for SignerError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::EmptyMessage => formatter.write_str("signing message must not be empty"),
+        }
+    }
+}
+
+impl std::error::Error for SignerError {}
+
 #[derive(Serialize, Deserialize, PartialEq, Eq)]
 pub struct LockedVault {
     version: u8,
@@ -114,6 +130,36 @@ struct KdfParameters {
 
 pub struct UnlockedWallet {
     signing_key: SigningKey,
+}
+
+pub struct AuthorizedMessage<'a> {
+    bytes: &'a [u8],
+}
+
+impl<'a> AuthorizedMessage<'a> {
+    pub fn new(bytes: &'a [u8]) -> Result<Self, SignerError> {
+        if bytes.is_empty() {
+            return Err(SignerError::EmptyMessage);
+        }
+
+        Ok(Self { bytes })
+    }
+
+    fn as_bytes(&self) -> &[u8] {
+        self.bytes
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub struct SignatureBytes {
+    value: [u8; SIGNATURE_LEN],
+}
+
+impl SignatureBytes {
+    #[must_use]
+    pub const fn to_bytes(self) -> [u8; SIGNATURE_LEN] {
+        self.value
+    }
 }
 
 impl LockedVault {
@@ -252,6 +298,17 @@ impl UnlockedWallet {
     pub fn public_key(&self) -> [u8; 32] {
         self.signing_key.verifying_key().to_bytes()
     }
+
+    pub fn sign_authorized(
+        &self,
+        message: &AuthorizedMessage<'_>,
+    ) -> Result<SignatureBytes, SignerError> {
+        let signature = self.signing_key.sign(message.as_bytes());
+
+        Ok(SignatureBytes {
+            value: signature.to_bytes(),
+        })
+    }
 }
 
 impl KdfParameters {
@@ -297,9 +354,11 @@ fn decode_array<const N: usize>(encoded: &str) -> Result<[u8; N], VaultError> {
 #[cfg(test)]
 mod tests {
     use super::{
-        LockedVault, SecretPassphrase, SecretSeed, VaultError, CIPHERTEXT_LEN, VAULT_VERSION,
+        AuthorizedMessage, LockedVault, SecretPassphrase, SecretSeed, SignerError, VaultError,
+        CIPHERTEXT_LEN, VAULT_VERSION,
     };
     use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
+    use ed25519_dalek::{Signature, Verifier as _, VerifyingKey};
 
     #[test]
     fn engine_identity_is_stable() {
@@ -406,6 +465,33 @@ mod tests {
 
         let result = LockedVault::from_json(&malformed);
         assert!(matches!(result, Err(VaultError::InvalidFormat)));
+        Ok(())
+    }
+
+    #[test]
+    fn empty_authorized_message_is_rejected() {
+        let result = AuthorizedMessage::new(&[]);
+        assert!(matches!(result, Err(SignerError::EmptyMessage)));
+    }
+
+    #[test]
+    fn authorized_message_signature_verifies() -> Result<(), VaultError> {
+        let passphrase = SecretPassphrase::new("signing test".to_owned());
+        let vault = LockedVault::import_seed(&passphrase, SecretSeed::new([19_u8; 32]))?;
+        let unlocked = vault.unlock(&passphrase)?;
+        let public_key = unlocked.public_key();
+        let message_bytes = b"scout authorized execution message";
+        let message = AuthorizedMessage::new(message_bytes)
+            .map_err(|_| VaultError::SerializationFailed)?;
+        let signature = unlocked
+            .sign_authorized(&message)
+            .map_err(|_| VaultError::SerializationFailed)?;
+
+        let verifying_key =
+            VerifyingKey::from_bytes(&public_key).map_err(|_| VaultError::InvalidFormat)?;
+        let signature = Signature::from_bytes(&signature.to_bytes());
+
+        assert!(verifying_key.verify(message_bytes, &signature).is_ok());
         Ok(())
     }
 }
