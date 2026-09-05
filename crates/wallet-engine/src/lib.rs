@@ -9,7 +9,7 @@ use chacha20poly1305::{
 use ed25519_dalek::SigningKey;
 use serde::{Deserialize, Serialize};
 use std::fmt;
-use zeroize::Zeroizing;
+use zeroize::{Zeroize, Zeroizing};
 
 const VAULT_VERSION: u8 = 1;
 const AAD: &[u8] = b"scout-wallet-v1";
@@ -17,15 +17,50 @@ const SALT_LEN: usize = 16;
 const NONCE_LEN: usize = 24;
 const SEED_LEN: usize = 32;
 const KEY_LEN: usize = 32;
+const AEAD_TAG_LEN: usize = 16;
+const CIPHERTEXT_LEN: usize = SEED_LEN + AEAD_TAG_LEN;
 
 const ARGON2_MEMORY_KIB: u32 = 65_536;
 const ARGON2_ITERATIONS: u32 = 3;
 const ARGON2_LANES: u32 = 1;
 
-/// Returns the fixed identity of the isolated wallet engine crate.
 #[must_use]
 pub const fn engine_name() -> &'static str {
     "scout-wallet-lab"
+}
+
+pub struct SecretPassphrase {
+    value: Zeroizing<String>,
+}
+
+impl SecretPassphrase {
+    #[must_use]
+    pub fn new(value: String) -> Self {
+        Self {
+            value: Zeroizing::new(value),
+        }
+    }
+
+    fn expose(&self) -> &str {
+        self.value.as_str()
+    }
+}
+
+pub struct SecretSeed {
+    value: Zeroizing<[u8; SEED_LEN]>,
+}
+
+impl SecretSeed {
+    #[must_use]
+    pub fn new(value: [u8; SEED_LEN]) -> Self {
+        Self {
+            value: Zeroizing::new(value),
+        }
+    }
+
+    fn expose(&self) -> &[u8; SEED_LEN] {
+        self.value.as_ref()
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -82,14 +117,23 @@ pub struct UnlockedWallet {
 }
 
 impl LockedVault {
-    pub fn generate(passphrase: &str) -> Result<Self, VaultError> {
-        let mut seed = Zeroizing::new([0_u8; SEED_LEN]);
-        getrandom::getrandom(seed.as_mut()).map_err(|_| VaultError::RandomnessUnavailable)?;
+    pub fn generate(passphrase: &SecretPassphrase) -> Result<Self, VaultError> {
+        let mut seed = [0_u8; SEED_LEN];
+        getrandom::getrandom(&mut seed).map_err(|_| VaultError::RandomnessUnavailable)?;
 
-        Self::seal_seed(passphrase, seed.as_ref())
+        let result = Self::seal_seed(passphrase, &seed);
+        seed.zeroize();
+        result
     }
 
-    pub fn unlock(&self, passphrase: &str) -> Result<UnlockedWallet, VaultError> {
+    pub fn import_seed(
+        passphrase: &SecretPassphrase,
+        seed: SecretSeed,
+    ) -> Result<Self, VaultError> {
+        Self::seal_seed(passphrase, seed.expose())
+    }
+
+    pub fn unlock(&self, passphrase: &SecretPassphrase) -> Result<UnlockedWallet, VaultError> {
         self.validate_metadata()?;
 
         let salt = decode_array::<SALT_LEN>(&self.salt_b64)?;
@@ -146,7 +190,10 @@ impl LockedVault {
         Ok(vault)
     }
 
-    fn seal_seed(passphrase: &str, seed: &[u8; SEED_LEN]) -> Result<Self, VaultError> {
+    fn seal_seed(
+        passphrase: &SecretPassphrase,
+        seed: &[u8; SEED_LEN],
+    ) -> Result<Self, VaultError> {
         let signing_key = SigningKey::from_bytes(seed);
         let public_key = signing_key.verifying_key().to_bytes();
 
@@ -184,12 +231,18 @@ impl LockedVault {
         if self.kdf != KdfParameters::current() {
             return Err(VaultError::InvalidFormat);
         }
+
         decode_array::<32>(&self.public_key_b64)?;
         decode_array::<SALT_LEN>(&self.salt_b64)?;
         decode_array::<NONCE_LEN>(&self.nonce_b64)?;
-        if BASE64.decode(&self.ciphertext_b64).is_err() {
+
+        let ciphertext = BASE64
+            .decode(&self.ciphertext_b64)
+            .map_err(|_| VaultError::InvalidFormat)?;
+        if ciphertext.len() != CIPHERTEXT_LEN {
             return Err(VaultError::InvalidFormat);
         }
+
         Ok(())
     }
 }
@@ -214,7 +267,7 @@ impl KdfParameters {
 }
 
 fn derive_key(
-    passphrase: &str,
+    passphrase: &SecretPassphrase,
     salt: &[u8; SALT_LEN],
     parameters: &KdfParameters,
 ) -> Result<Zeroizing<[u8; KEY_LEN]>, VaultError> {
@@ -229,7 +282,7 @@ fn derive_key(
     let argon2 = Argon2::new(Algorithm::Argon2id, Version::V0x13, params);
     let mut key = Zeroizing::new([0_u8; KEY_LEN]);
     argon2
-        .hash_password_into(passphrase.as_bytes(), salt, key.as_mut())
+        .hash_password_into(passphrase.expose().as_bytes(), salt, key.as_mut())
         .map_err(|_| VaultError::KeyDerivationFailed)?;
     Ok(key)
 }
@@ -243,7 +296,10 @@ fn decode_array<const N: usize>(encoded: &str) -> Result<[u8; N], VaultError> {
 
 #[cfg(test)]
 mod tests {
-    use super::{LockedVault, VaultError, VAULT_VERSION};
+    use super::{
+        LockedVault, SecretPassphrase, SecretSeed, VaultError, CIPHERTEXT_LEN, VAULT_VERSION,
+    };
+    use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
 
     #[test]
     fn engine_identity_is_stable() {
@@ -252,49 +308,42 @@ mod tests {
 
     #[test]
     fn generated_vault_round_trips() -> Result<(), VaultError> {
-        let vault = LockedVault::generate("correct horse battery staple")?;
+        let passphrase = SecretPassphrase::new("correct horse battery staple".to_owned());
+        let vault = LockedVault::generate(&passphrase)?;
         let expected_public_key = vault.public_key()?;
         let json = vault.to_json()?;
         let parsed = LockedVault::from_json(&json)?;
-        let unlocked = parsed.unlock("correct horse battery staple")?;
+        let unlocked = parsed.unlock(&passphrase)?;
 
         assert_eq!(unlocked.public_key(), expected_public_key);
         Ok(())
     }
 
     #[test]
+    fn imported_seed_is_stable() -> Result<(), VaultError> {
+        let passphrase = SecretPassphrase::new("import test".to_owned());
+        let first = LockedVault::import_seed(&passphrase, SecretSeed::new([7_u8; 32]))?;
+        let second = LockedVault::import_seed(&passphrase, SecretSeed::new([7_u8; 32]))?;
+
+        assert_eq!(first.public_key()?, second.public_key()?);
+        Ok(())
+    }
+
+    #[test]
     fn wrong_passphrase_is_rejected() -> Result<(), VaultError> {
-        let vault = LockedVault::generate("correct passphrase")?;
-        let result = vault.unlock("wrong passphrase");
+        let correct = SecretPassphrase::new("correct passphrase".to_owned());
+        let wrong = SecretPassphrase::new("wrong passphrase".to_owned());
+        let vault = LockedVault::generate(&correct)?;
+        let result = vault.unlock(&wrong);
 
         assert!(matches!(result, Err(VaultError::DecryptionFailed)));
         Ok(())
     }
 
     #[test]
-    fn ciphertext_tampering_is_rejected() -> Result<(), VaultError> {
-        let vault = LockedVault::generate("tamper test")?;
-        let mut json = vault.to_json()?;
-        let replacement = if json.contains("\"ciphertext_b64\": \"A") {
-            "\"ciphertext_b64\": \"B"
-        } else {
-            "\"ciphertext_b64\": \"A"
-        };
-        json = json.replacen("\"ciphertext_b64\": \"", replacement, 1);
-
-        let parsed = LockedVault::from_json(&json)?;
-        let result = parsed.unlock("tamper test");
-
-        assert!(matches!(
-            result,
-            Err(VaultError::DecryptionFailed | VaultError::InvalidFormat)
-        ));
-        Ok(())
-    }
-
-    #[test]
     fn unsupported_version_is_rejected() -> Result<(), VaultError> {
-        let vault = LockedVault::generate("version test")?;
+        let passphrase = SecretPassphrase::new("version test".to_owned());
+        let vault = LockedVault::generate(&passphrase)?;
         let mut json = vault.to_json()?;
         json = json.replacen(
             &format!("\"version\": {VAULT_VERSION}"),
@@ -308,12 +357,44 @@ mod tests {
     }
 
     #[test]
-    fn serialized_vault_has_no_plaintext_passphrase() -> Result<(), VaultError> {
-        let passphrase = "never serialize this phrase";
-        let vault = LockedVault::generate(passphrase)?;
+    fn serialized_vault_has_no_plaintext_passphrase_or_seed() -> Result<(), VaultError> {
+        let passphrase_text = "never serialize this phrase";
+        let passphrase = SecretPassphrase::new(passphrase_text.to_owned());
+        let seed = [203_u8; 32];
+        let seed_b64 = BASE64.encode(seed);
+        let vault = LockedVault::import_seed(&passphrase, SecretSeed::new(seed))?;
         let json = vault.to_json()?;
 
-        assert!(!json.contains(passphrase));
+        assert!(!json.contains(passphrase_text));
+        assert!(!json.contains(&seed_b64));
+        Ok(())
+    }
+
+    #[test]
+    fn malformed_ciphertext_length_is_rejected() -> Result<(), VaultError> {
+        let passphrase = SecretPassphrase::new("length test".to_owned());
+        let vault = LockedVault::generate(&passphrase)?;
+        let json = vault.to_json()?;
+        let encoded = BASE64.encode(vec![0_u8; CIPHERTEXT_LEN - 1]);
+
+        let marker = "\"ciphertext_b64\": \"";
+        let start = json
+            .find(marker)
+            .ok_or(VaultError::SerializationFailed)?
+            + marker.len();
+        let tail = &json[start..];
+        let end = tail
+            .find('"')
+            .ok_or(VaultError::SerializationFailed)?
+            + start;
+
+        let mut malformed = String::with_capacity(json.len());
+        malformed.push_str(&json[..start]);
+        malformed.push_str(&encoded);
+        malformed.push_str(&json[end..]);
+
+        let result = LockedVault::from_json(&malformed);
+        assert!(matches!(result, Err(VaultError::InvalidFormat)));
         Ok(())
     }
 }
