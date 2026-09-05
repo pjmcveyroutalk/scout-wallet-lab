@@ -1,0 +1,10 @@
+target/
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.seed
+*.secret
+wallet-data/
+vault-data/
