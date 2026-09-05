@@ -8,7 +8,10 @@ use std::{
 };
 
 #[cfg(unix)]
-use std::os::unix::fs::OpenOptionsExt;
+use std::{
+    os::unix::fs::OpenOptionsExt,
+    process::Command,
+};
 
 use rustls::crypto::CryptoProvider;
 use serde_json::{json, Value};
@@ -231,8 +234,8 @@ fn load_vault(path: &Path) -> Result<LockedVault, Box<dyn Error>> {
 }
 
 fn read_new_passphrase() -> Result<SecretPassphrase, Box<dyn Error>> {
-    let first = read_line("Enter a new wallet passphrase: ")?;
-    let second = read_line("Confirm wallet passphrase: ")?;
+    let first = read_secret_line("Enter a new wallet passphrase: ")?;
+    let second = read_secret_line("Confirm wallet passphrase: ")?;
 
     if first.is_empty() {
         return Err("wallet passphrase must not be empty".into());
@@ -246,7 +249,7 @@ fn read_new_passphrase() -> Result<SecretPassphrase, Box<dyn Error>> {
 }
 
 fn read_existing_passphrase() -> Result<SecretPassphrase, Box<dyn Error>> {
-    let value = read_line("Enter wallet passphrase: ")?;
+    let value = read_secret_line("Enter wallet passphrase: ")?;
 
     if value.is_empty() {
         return Err("wallet passphrase must not be empty".into());
@@ -255,18 +258,76 @@ fn read_existing_passphrase() -> Result<SecretPassphrase, Box<dyn Error>> {
     Ok(SecretPassphrase::new(value))
 }
 
-fn read_line(prompt: &str) -> Result<String, Box<dyn Error>> {
+#[cfg(unix)]
+struct TerminalEchoGuard {
+    active: bool,
+}
+
+#[cfg(unix)]
+impl TerminalEchoGuard {
+    fn disable() -> Result<Self, Box<dyn Error>> {
+        let status = Command::new("stty").arg("-echo").status()?;
+
+        if !status.success() {
+            return Err(
+                "secure terminal passphrase input is unavailable; refusing echoed input".into(),
+            );
+        }
+
+        Ok(Self { active: true })
+    }
+
+    fn restore(&mut self) -> Result<(), Box<dyn Error>> {
+        if !self.active {
+            return Ok(());
+        }
+
+        let status = Command::new("stty").arg("echo").status()?;
+
+        if !status.success() {
+            return Err("failed to restore terminal echo".into());
+        }
+
+        self.active = false;
+        Ok(())
+    }
+}
+
+#[cfg(unix)]
+impl Drop for TerminalEchoGuard {
+    fn drop(&mut self) {
+        if self.active {
+            let _ = Command::new("stty").arg("echo").status();
+            self.active = false;
+        }
+    }
+}
+
+#[cfg(unix)]
+fn read_secret_line(prompt: &str) -> Result<String, Box<dyn Error>> {
     print!("{prompt}");
     io::stdout().flush()?;
 
+    let mut echo_guard = TerminalEchoGuard::disable()?;
+
     let mut value = String::new();
-    io::stdin().read_line(&mut value)?;
+    let read_result = io::stdin().read_line(&mut value);
+
+    echo_guard.restore()?;
+    println!();
+
+    read_result?;
 
     while value.ends_with(['\n', '\r']) {
         value.pop();
     }
 
     Ok(value)
+}
+
+#[cfg(not(unix))]
+fn read_secret_line(_prompt: &str) -> Result<String, Box<dyn Error>> {
+    Err("secure no-echo wallet passphrase input is not available on this platform".into())
 }
 
 fn write_new_vault(path: &Path, encoded: &str) -> Result<(), Box<dyn Error>> {
