@@ -266,10 +266,9 @@ impl CanonicalTransactionMessage {
             return Err(TransactionMessageError::EmptyInstructions);
         }
 
-        let message =
-            Message::new_with_blockhash(instructions, Some(&payer), &recent_blockhash);
-        let bytes =
-            bincode::serialize(&message).map_err(|_| TransactionMessageError::SerializationFailed)?;
+        let message = Message::new_with_blockhash(instructions, Some(&payer), &recent_blockhash);
+        let bytes = bincode::serialize(&message)
+            .map_err(|_| TransactionMessageError::SerializationFailed)?;
 
         Ok(Self { bytes })
     }
@@ -871,8 +870,7 @@ mod tests {
             data: vec![1_u8, 2_u8, 3_u8, 4_u8],
         };
 
-        let first =
-            CanonicalTransactionMessage::new(&[instruction.clone()], payer, blockhash)?;
+        let first = CanonicalTransactionMessage::new(&[instruction.clone()], payer, blockhash)?;
         let second = CanonicalTransactionMessage::new(&[instruction], payer, blockhash)?;
 
         assert_eq!(first.bytes(), second.bytes());
@@ -893,14 +891,13 @@ mod tests {
             accounts: Vec::new(),
             data: vec![9_u8, 8_u8, 7_u8],
         };
-        let canonical =
-            CanonicalTransactionMessage::new(&[instruction], payer, blockhash)
-                .map_err(|_| VaultError::SerializationFailed)?;
+        let canonical = CanonicalTransactionMessage::new(&[instruction], payer, blockhash)
+            .map_err(|_| VaultError::SerializationFailed)?;
         let authorized = AuthorizedTransactionMessage::new(&canonical);
         let signature = unlocked.sign_transaction_message(&authorized);
 
-        let verifying_key =
-            VerifyingKey::from_bytes(&unlocked.public_key()).map_err(|_| VaultError::InvalidFormat)?;
+        let verifying_key = VerifyingKey::from_bytes(&unlocked.public_key())
+            .map_err(|_| VaultError::InvalidFormat)?;
         let signature = Signature::from_bytes(&signature.to_bytes());
 
         assert!(verifying_key.verify(canonical.bytes(), &signature).is_ok());
