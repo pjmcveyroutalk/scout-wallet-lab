@@ -502,6 +502,106 @@ impl<'a> AuthorizedTransactionMessage<'a> {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PolicyError {
+    ZeroExposureLimit,
+    NoAllowedPrograms,
+    ExposureExceeded,
+    ProgramNotAllowed,
+    TransactionNotReserved,
+    BlockhashExpired,
+    InvalidMessage,
+}
+
+impl fmt::Display for PolicyError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let message = match self {
+            Self::ZeroExposureLimit => "execution policy exposure limit must be greater than zero",
+            Self::NoAllowedPrograms => "execution policy requires at least one allowed program",
+            Self::ExposureExceeded => "transaction reservation exceeds execution policy",
+            Self::ProgramNotAllowed => "transaction contains a program not allowed by policy",
+            Self::TransactionNotReserved => "only reserved transactions may be authorized",
+            Self::BlockhashExpired => "transaction blockhash has expired",
+            Self::InvalidMessage => "transaction message could not be validated by policy",
+        };
+        formatter.write_str(message)
+    }
+}
+
+impl std::error::Error for PolicyError {}
+
+pub struct ExecutionPolicy {
+    max_reserved_lamports: u64,
+    allowed_programs: Vec<Pubkey>,
+}
+
+impl ExecutionPolicy {
+    pub fn new(
+        max_reserved_lamports: u64,
+        allowed_programs: &[Pubkey],
+    ) -> Result<Self, PolicyError> {
+        if max_reserved_lamports == 0 {
+            return Err(PolicyError::ZeroExposureLimit);
+        }
+
+        if allowed_programs.is_empty() {
+            return Err(PolicyError::NoAllowedPrograms);
+        }
+
+        Ok(Self {
+            max_reserved_lamports,
+            allowed_programs: allowed_programs.to_vec(),
+        })
+    }
+
+    #[must_use]
+    pub const fn max_reserved_lamports(&self) -> u64 {
+        self.max_reserved_lamports
+    }
+
+    #[must_use]
+    pub fn allowed_programs(&self) -> &[Pubkey] {
+        self.allowed_programs.as_slice()
+    }
+
+    pub fn authorize<'a>(
+        &self,
+        transaction: &'a PreparedTransaction,
+        current_block_height: u64,
+    ) -> Result<AuthorizedTransactionMessage<'a>, PolicyError> {
+        if transaction.ledger().state() != TransactionState::Reserved {
+            return Err(PolicyError::TransactionNotReserved);
+        }
+
+        if transaction.ledger().reserved_lamports() > self.max_reserved_lamports {
+            return Err(PolicyError::ExposureExceeded);
+        }
+
+        if current_block_height > transaction.ledger().last_valid_block_height() {
+            return Err(PolicyError::BlockhashExpired);
+        }
+
+        let message: Message = bincode::deserialize(transaction.message().bytes())
+            .map_err(|_| PolicyError::InvalidMessage)?;
+
+        for instruction in &message.instructions {
+            let program_index = usize::from(instruction.program_id_index);
+            let program_id = message
+                .account_keys
+                .get(program_index)
+                .ok_or(PolicyError::InvalidMessage)?;
+
+            if !self.allowed_programs.contains(program_id) {
+                return Err(PolicyError::ProgramNotAllowed);
+            }
+        }
+
+        Ok(AuthorizedTransactionMessage {
+            bytes: transaction.message().bytes(),
+        })
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PreparedTransactionError {
     Message(TransactionMessageError),
     Ledger(LedgerError),
@@ -1160,11 +1260,11 @@ mod tests {
         build_blockhash_lease, build_get_balance_request, build_get_block_height_request,
         build_get_latest_blockhash_request, parse_block_height_response,
         parse_latest_blockhash_response, AuthorizedMessage, AuthorizedTransactionMessage,
-        BlockhashLease, CanonicalTransactionMessage, Cluster, GetBlockHeightResponse,
-        GetLatestBlockhashResponse, LedgerError, LockedVault, PreparedTransaction,
-        PreparedTransactionError, RpcError, SecretPassphrase, SecretSeed, SignatureBytes,
-        SignerError, SignerState, TransactionLedgerEntry, TransactionMessageError,
-        TransactionState, VaultError, CIPHERTEXT_LEN, VAULT_VERSION,
+        BlockhashLease, CanonicalTransactionMessage, Cluster, ExecutionPolicy,
+        GetBlockHeightResponse, GetLatestBlockhashResponse, LedgerError, LockedVault, PolicyError,
+        PreparedTransaction, PreparedTransactionError, RpcError, SecretPassphrase, SecretSeed,
+        SignatureBytes, SignerError, SignerState, TransactionLedgerEntry,
+        TransactionMessageError, TransactionState, VaultError, CIPHERTEXT_LEN, VAULT_VERSION,
     };
     use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
     use ed25519_dalek::{Signature, Verifier as _, VerifyingKey};
@@ -1558,6 +1658,167 @@ mod tests {
 
         assert_eq!(unlocked.signer_state(), SignerState::Locked);
         assert!(unlocked.signing_is_locked());
+        Ok(())
+    }
+
+    #[test]
+    fn policy_rejects_zero_exposure_limit() {
+        let program_id = Pubkey::new_from_array([151_u8; 32]);
+        let result = ExecutionPolicy::new(0, &[program_id]);
+
+        assert!(matches!(result, Err(PolicyError::ZeroExposureLimit)));
+    }
+
+    #[test]
+    fn policy_rejects_empty_program_allowlist() {
+        let result = ExecutionPolicy::new(500_000_000, &[]);
+
+        assert!(matches!(result, Err(PolicyError::NoAllowedPrograms)));
+    }
+
+    #[test]
+    fn policy_rejects_exposure_above_limit() -> Result<(), VaultError> {
+        let payer = Pubkey::new_from_array([152_u8; 32]);
+        let program_id = Pubkey::new_from_array([153_u8; 32]);
+        let blockhash = Hash::new_from_array([154_u8; 32]);
+        let instruction = Instruction {
+            program_id,
+            accounts: Vec::new(),
+            data: vec![1_u8],
+        };
+        let lease = test_lease(blockhash, 700, 690);
+        let prepared = PreparedTransaction::reserve(&[instruction], payer, 600_000_000, lease)
+            .map_err(|_| VaultError::SerializationFailed)?;
+        let policy = ExecutionPolicy::new(500_000_000, &[program_id])
+            .map_err(|_| VaultError::SerializationFailed)?;
+
+        let result = policy.authorize(&prepared, 690);
+
+        assert!(matches!(result, Err(PolicyError::ExposureExceeded)));
+        Ok(())
+    }
+
+    #[test]
+    fn policy_rejects_unapproved_program() -> Result<(), VaultError> {
+        let payer = Pubkey::new_from_array([155_u8; 32]);
+        let program_id = Pubkey::new_from_array([156_u8; 32]);
+        let allowed_program = Pubkey::new_from_array([157_u8; 32]);
+        let blockhash = Hash::new_from_array([158_u8; 32]);
+        let instruction = Instruction {
+            program_id,
+            accounts: Vec::new(),
+            data: vec![2_u8],
+        };
+        let lease = test_lease(blockhash, 800, 790);
+        let prepared = PreparedTransaction::reserve(&[instruction], payer, 400_000_000, lease)
+            .map_err(|_| VaultError::SerializationFailed)?;
+        let policy = ExecutionPolicy::new(500_000_000, &[allowed_program])
+            .map_err(|_| VaultError::SerializationFailed)?;
+
+        let result = policy.authorize(&prepared, 790);
+
+        assert!(matches!(result, Err(PolicyError::ProgramNotAllowed)));
+        Ok(())
+    }
+
+    #[test]
+    fn policy_rejects_expired_reservation() -> Result<(), VaultError> {
+        let payer = Pubkey::new_from_array([159_u8; 32]);
+        let program_id = Pubkey::new_from_array([160_u8; 32]);
+        let blockhash = Hash::new_from_array([161_u8; 32]);
+        let instruction = Instruction {
+            program_id,
+            accounts: Vec::new(),
+            data: vec![3_u8],
+        };
+        let lease = test_lease(blockhash, 900, 890);
+        let prepared = PreparedTransaction::reserve(&[instruction], payer, 400_000_000, lease)
+            .map_err(|_| VaultError::SerializationFailed)?;
+        let policy = ExecutionPolicy::new(500_000_000, &[program_id])
+            .map_err(|_| VaultError::SerializationFailed)?;
+
+        let result = policy.authorize(&prepared, 901);
+
+        assert!(matches!(result, Err(PolicyError::BlockhashExpired)));
+        Ok(())
+    }
+
+    #[test]
+    fn policy_rejects_transaction_after_reserved_state() -> Result<(), VaultError> {
+        let payer = Pubkey::new_from_array([162_u8; 32]);
+        let program_id = Pubkey::new_from_array([163_u8; 32]);
+        let blockhash = Hash::new_from_array([164_u8; 32]);
+        let instruction = Instruction {
+            program_id,
+            accounts: Vec::new(),
+            data: vec![4_u8],
+        };
+        let lease = test_lease(blockhash, 1_000, 990);
+        let mut prepared = PreparedTransaction::reserve(&[instruction], payer, 400_000_000, lease)
+            .map_err(|_| VaultError::SerializationFailed)?;
+        let policy = ExecutionPolicy::new(500_000_000, &[program_id])
+            .map_err(|_| VaultError::SerializationFailed)?;
+        let signature = SignatureBytes {
+            value: [165_u8; 64],
+        };
+
+        prepared
+            .ledger_mut()
+            .mark_signed(signature)
+            .map_err(|_| VaultError::SerializationFailed)?;
+
+        let result = policy.authorize(&prepared, 990);
+
+        assert!(matches!(result, Err(PolicyError::TransactionNotReserved)));
+        Ok(())
+    }
+
+    #[test]
+    fn policy_mints_authorization_for_reserved_allowed_transaction() -> Result<(), VaultError> {
+        let passphrase = SecretPassphrase::new("policy signing test".to_owned());
+        let vault = LockedVault::import_seed(&passphrase, SecretSeed::new([166_u8; 32]))?;
+        let unlocked = vault.unlock(&passphrase)?;
+        let payer = Pubkey::new_from_array(unlocked.public_key());
+        let program_id = Pubkey::new_from_array([167_u8; 32]);
+        let blockhash = Hash::new_from_array([168_u8; 32]);
+        let instruction = Instruction {
+            program_id,
+            accounts: Vec::new(),
+            data: vec![5_u8, 6_u8],
+        };
+        let lease = test_lease(blockhash, 1_100, 1_090);
+        let mut prepared = PreparedTransaction::reserve(&[instruction], payer, 400_000_000, lease)
+            .map_err(|_| VaultError::SerializationFailed)?;
+        let policy = ExecutionPolicy::new(500_000_000, &[program_id])
+            .map_err(|_| VaultError::SerializationFailed)?;
+
+        assert_eq!(policy.max_reserved_lamports(), 500_000_000);
+        assert_eq!(policy.allowed_programs(), &[program_id]);
+
+        let authorized = policy
+            .authorize(&prepared, 1_090)
+            .map_err(|_| VaultError::SerializationFailed)?;
+        let signature = unlocked
+            .sign_transaction_message(&authorized)
+            .map_err(|_| VaultError::SerializationFailed)?;
+
+        let verifying_key = VerifyingKey::from_bytes(&unlocked.public_key())
+            .map_err(|_| VaultError::InvalidFormat)?;
+        let verification_signature = Signature::from_bytes(&signature.to_bytes());
+
+        assert!(verifying_key
+            .verify(prepared.message().bytes(), &verification_signature)
+            .is_ok());
+
+        drop(authorized);
+
+        prepared
+            .ledger_mut()
+            .mark_signed(signature)
+            .map_err(|_| VaultError::SerializationFailed)?;
+
+        assert_eq!(prepared.ledger().state(), TransactionState::Signed);
+        assert_eq!(prepared.ledger().signature(), Some(signature));
         Ok(())
     }
 
