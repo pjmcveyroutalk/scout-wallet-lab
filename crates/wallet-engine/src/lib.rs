@@ -13,7 +13,7 @@ use solana_hash::Hash;
 use solana_instruction::Instruction;
 use solana_message::Message;
 use solana_pubkey::Pubkey;
-use std::{fmt, time::Duration};
+use std::{fmt, str::FromStr, time::Duration};
 use zeroize::{Zeroize, Zeroizing};
 
 const VAULT_VERSION: u8 = 1;
@@ -100,6 +100,48 @@ impl DevnetAccount {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct BlockhashLease {
+    recent_blockhash: Hash,
+    last_valid_block_height: u64,
+    observed_block_height: u64,
+}
+
+impl BlockhashLease {
+    #[cfg(test)]
+    fn new_for_test(
+        recent_blockhash: Hash,
+        last_valid_block_height: u64,
+        observed_block_height: u64,
+    ) -> Self {
+        Self {
+            recent_blockhash,
+            last_valid_block_height,
+            observed_block_height,
+        }
+    }
+
+    #[must_use]
+    pub const fn recent_blockhash(&self) -> Hash {
+        self.recent_blockhash
+    }
+
+    #[must_use]
+    pub const fn last_valid_block_height(&self) -> u64 {
+        self.last_valid_block_height
+    }
+
+    #[must_use]
+    pub const fn observed_block_height(&self) -> u64 {
+        self.observed_block_height
+    }
+
+    #[must_use]
+    pub const fn is_valid(&self) -> bool {
+        self.observed_block_height <= self.last_valid_block_height
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RpcError {
     TlsInitializationFailed,
     ClientInitializationFailed,
@@ -107,6 +149,7 @@ pub enum RpcError {
     HttpStatusFailed,
     InvalidResponse,
     RpcRejected,
+    BlockhashExpired,
 }
 
 impl fmt::Display for RpcError {
@@ -118,6 +161,7 @@ impl fmt::Display for RpcError {
             Self::HttpStatusFailed => "RPC HTTP status rejected",
             Self::InvalidResponse => "RPC response was invalid",
             Self::RpcRejected => "RPC request was rejected",
+            Self::BlockhashExpired => "RPC returned an already-expired blockhash",
         };
         formatter.write_str(message)
     }
@@ -138,6 +182,22 @@ struct GetBalanceRequest {
 }
 
 #[derive(Serialize)]
+struct GetLatestBlockhashRequest {
+    jsonrpc: &'static str,
+    id: u64,
+    method: &'static str,
+    params: (RpcCommitment,),
+}
+
+#[derive(Serialize)]
+struct GetBlockHeightRequest {
+    jsonrpc: &'static str,
+    id: u64,
+    method: &'static str,
+    params: (RpcCommitment,),
+}
+
+#[derive(Serialize)]
 struct RpcCommitment {
     commitment: &'static str,
 }
@@ -151,6 +211,30 @@ struct GetBalanceResponse {
 #[derive(Deserialize)]
 struct GetBalanceResult {
     value: u64,
+}
+
+#[derive(Deserialize)]
+struct GetLatestBlockhashResponse {
+    result: Option<GetLatestBlockhashResult>,
+    error: Option<serde_json::Value>,
+}
+
+#[derive(Deserialize)]
+struct GetLatestBlockhashResult {
+    value: GetLatestBlockhashValue,
+}
+
+#[derive(Deserialize)]
+struct GetLatestBlockhashValue {
+    blockhash: String,
+    #[serde(rename = "lastValidBlockHeight")]
+    last_valid_block_height: u64,
+}
+
+#[derive(Deserialize)]
+struct GetBlockHeightResponse {
+    result: Option<u64>,
+    error: Option<serde_json::Value>,
 }
 
 impl DevnetRpc {
@@ -208,6 +292,63 @@ impl DevnetRpc {
             Err(error) => Err(error),
         }
     }
+
+    pub async fn get_latest_blockhash(&self) -> Result<(Hash, u64), RpcError> {
+        let request = build_get_latest_blockhash_request();
+
+        let response = self
+            .client
+            .post(Cluster::Devnet.rpc_url())
+            .json(&request)
+            .send()
+            .await
+            .map_err(|_| RpcError::TransportFailed)?;
+
+        if !response.status().is_success() {
+            return Err(RpcError::HttpStatusFailed);
+        }
+
+        let response = response
+            .json::<GetLatestBlockhashResponse>()
+            .await
+            .map_err(|_| RpcError::InvalidResponse)?;
+
+        parse_latest_blockhash_response(response)
+    }
+
+    pub async fn get_block_height(&self) -> Result<u64, RpcError> {
+        let request = build_get_block_height_request();
+
+        let response = self
+            .client
+            .post(Cluster::Devnet.rpc_url())
+            .json(&request)
+            .send()
+            .await
+            .map_err(|_| RpcError::TransportFailed)?;
+
+        if !response.status().is_success() {
+            return Err(RpcError::HttpStatusFailed);
+        }
+
+        let response = response
+            .json::<GetBlockHeightResponse>()
+            .await
+            .map_err(|_| RpcError::InvalidResponse)?;
+
+        parse_block_height_response(response)
+    }
+
+    pub async fn resolve_fresh_blockhash(&self) -> Result<BlockhashLease, RpcError> {
+        let (recent_blockhash, last_valid_block_height) = self.get_latest_blockhash().await?;
+        let observed_block_height = self.get_block_height().await?;
+
+        build_blockhash_lease(
+            recent_blockhash,
+            last_valid_block_height,
+            observed_block_height,
+        )
+    }
 }
 
 fn ensure_tls_provider() -> Result<(), RpcError> {
@@ -232,6 +373,70 @@ fn build_get_balance_request(address: Pubkey) -> GetBalanceRequest {
             },
         ),
     }
+}
+
+fn build_get_latest_blockhash_request() -> GetLatestBlockhashRequest {
+    GetLatestBlockhashRequest {
+        jsonrpc: "2.0",
+        id: RPC_REQUEST_ID,
+        method: "getLatestBlockhash",
+        params: (RpcCommitment {
+            commitment: "confirmed",
+        },),
+    }
+}
+
+fn build_get_block_height_request() -> GetBlockHeightRequest {
+    GetBlockHeightRequest {
+        jsonrpc: "2.0",
+        id: RPC_REQUEST_ID,
+        method: "getBlockHeight",
+        params: (RpcCommitment {
+            commitment: "confirmed",
+        },),
+    }
+}
+
+fn parse_latest_blockhash_response(
+    response: GetLatestBlockhashResponse,
+) -> Result<(Hash, u64), RpcError> {
+    if response.error.is_some() {
+        return Err(RpcError::RpcRejected);
+    }
+
+    let value = response
+        .result
+        .map(|result| result.value)
+        .ok_or(RpcError::InvalidResponse)?;
+
+    let recent_blockhash =
+        Hash::from_str(&value.blockhash).map_err(|_| RpcError::InvalidResponse)?;
+
+    Ok((recent_blockhash, value.last_valid_block_height))
+}
+
+fn parse_block_height_response(response: GetBlockHeightResponse) -> Result<u64, RpcError> {
+    if response.error.is_some() {
+        return Err(RpcError::RpcRejected);
+    }
+
+    response.result.ok_or(RpcError::InvalidResponse)
+}
+
+fn build_blockhash_lease(
+    recent_blockhash: Hash,
+    last_valid_block_height: u64,
+    observed_block_height: u64,
+) -> Result<BlockhashLease, RpcError> {
+    if observed_block_height > last_valid_block_height {
+        return Err(RpcError::BlockhashExpired);
+    }
+
+    Ok(BlockhashLease {
+        recent_blockhash,
+        last_valid_block_height,
+        observed_block_height,
+    })
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -475,8 +680,7 @@ pub struct TransactionLedgerEntry {
 impl TransactionLedgerEntry {
     pub fn reserve(
         reserved_lamports: u64,
-        recent_blockhash: Hash,
-        last_valid_block_height: u64,
+        lease: BlockhashLease,
     ) -> Result<Self, LedgerError> {
         if reserved_lamports == 0 {
             return Err(LedgerError::ZeroReservation);
@@ -484,8 +688,8 @@ impl TransactionLedgerEntry {
 
         Ok(Self {
             reserved_lamports,
-            recent_blockhash,
-            last_valid_block_height,
+            recent_blockhash: lease.recent_blockhash(),
+            last_valid_block_height: lease.last_valid_block_height(),
             signature: None,
             state: TransactionState::Reserved,
         })
@@ -867,8 +1071,11 @@ fn decode_array<const N: usize>(encoded: &str) -> Result<[u8; N], VaultError> {
 #[cfg(test)]
 mod tests {
     use super::{
-        build_get_balance_request, AuthorizedMessage, AuthorizedTransactionMessage,
-        CanonicalTransactionMessage, Cluster, LedgerError, LockedVault, SecretPassphrase,
+        build_blockhash_lease, build_get_balance_request, build_get_block_height_request,
+        build_get_latest_blockhash_request, parse_block_height_response,
+        parse_latest_blockhash_response, AuthorizedMessage, AuthorizedTransactionMessage,
+        BlockhashLease, CanonicalTransactionMessage, Cluster, GetBlockHeightResponse,
+        GetLatestBlockhashResponse, LedgerError, LockedVault, RpcError, SecretPassphrase,
         SecretSeed, SignatureBytes, SignerError, TransactionLedgerEntry, TransactionMessageError,
         TransactionState, VaultError, CIPHERTEXT_LEN, VAULT_VERSION,
     };
@@ -877,6 +1084,18 @@ mod tests {
     use solana_hash::Hash;
     use solana_instruction::Instruction;
     use solana_pubkey::Pubkey;
+
+    fn test_lease(
+        blockhash: Hash,
+        last_valid_block_height: u64,
+        observed_block_height: u64,
+    ) -> BlockhashLease {
+        BlockhashLease::new_for_test(
+            blockhash,
+            last_valid_block_height,
+            observed_block_height,
+        )
+    }
 
     #[test]
     fn engine_identity_is_stable() {
@@ -1073,6 +1292,71 @@ mod tests {
     }
 
     #[test]
+    fn blockhash_rpc_requests_are_read_only_and_fixed() -> Result<(), VaultError> {
+        let latest = serde_json::to_value(build_get_latest_blockhash_request())
+            .map_err(|_| VaultError::SerializationFailed)?;
+        let height = serde_json::to_value(build_get_block_height_request())
+            .map_err(|_| VaultError::SerializationFailed)?;
+
+        assert_eq!(latest["jsonrpc"], "2.0");
+        assert_eq!(latest["id"], 1);
+        assert_eq!(latest["method"], "getLatestBlockhash");
+        assert_eq!(latest["params"][0]["commitment"], "confirmed");
+
+        assert_eq!(height["jsonrpc"], "2.0");
+        assert_eq!(height["id"], 1);
+        assert_eq!(height["method"], "getBlockHeight");
+        assert_eq!(height["params"][0]["commitment"], "confirmed");
+        Ok(())
+    }
+
+    #[test]
+    fn latest_blockhash_response_parses_canonical_hash() -> Result<(), RpcError> {
+        let expected = Hash::new_from_array([67_u8; 32]);
+        let encoded = format!(
+            r#"{{"result":{{"context":{{"slot":1}},"value":{{"blockhash":"{}","lastValidBlockHeight":500}}}},"error":null}}"#,
+            expected
+        );
+        let response: GetLatestBlockhashResponse =
+            serde_json::from_str(&encoded).map_err(|_| RpcError::InvalidResponse)?;
+        let (blockhash, last_valid_block_height) = parse_latest_blockhash_response(response)?;
+
+        assert_eq!(blockhash, expected);
+        assert_eq!(last_valid_block_height, 500);
+        Ok(())
+    }
+
+    #[test]
+    fn block_height_response_parses_height() -> Result<(), RpcError> {
+        let response: GetBlockHeightResponse =
+            serde_json::from_str(r#"{"result":490,"error":null}"#)
+                .map_err(|_| RpcError::InvalidResponse)?;
+
+        assert_eq!(parse_block_height_response(response)?, 490);
+        Ok(())
+    }
+
+    #[test]
+    fn expired_blockhash_lease_is_rejected() {
+        let blockhash = Hash::new_from_array([69_u8; 32]);
+        let result = build_blockhash_lease(blockhash, 500, 501);
+
+        assert!(matches!(result, Err(RpcError::BlockhashExpired)));
+    }
+
+    #[test]
+    fn fresh_blockhash_lease_preserves_validity_metadata() -> Result<(), RpcError> {
+        let blockhash = Hash::new_from_array([70_u8; 32]);
+        let lease = build_blockhash_lease(blockhash, 500, 490)?;
+
+        assert_eq!(lease.recent_blockhash(), blockhash);
+        assert_eq!(lease.last_valid_block_height(), 500);
+        assert_eq!(lease.observed_block_height(), 490);
+        assert!(lease.is_valid());
+        Ok(())
+    }
+
+    #[test]
     fn empty_transaction_message_is_rejected() {
         let payer = Pubkey::new_from_array([71_u8; 32]);
         let blockhash = Hash::new_from_array([73_u8; 32]);
@@ -1132,15 +1416,29 @@ mod tests {
     #[test]
     fn zero_transaction_reservation_is_rejected() {
         let blockhash = Hash::new_from_array([107_u8; 32]);
-        let result = TransactionLedgerEntry::reserve(0, blockhash, 500);
+        let lease = test_lease(blockhash, 500, 490);
+        let result = TransactionLedgerEntry::reserve(0, lease);
 
         assert!(matches!(result, Err(LedgerError::ZeroReservation)));
     }
 
     #[test]
+    fn ledger_reservation_consumes_blockhash_lease() -> Result<(), LedgerError> {
+        let blockhash = Hash::new_from_array([108_u8; 32]);
+        let lease = test_lease(blockhash, 500, 490);
+        let entry = TransactionLedgerEntry::reserve(900_000_000, lease)?;
+
+        assert_eq!(entry.recent_blockhash(), blockhash);
+        assert_eq!(entry.last_valid_block_height(), 500);
+        assert_eq!(entry.state(), TransactionState::Reserved);
+        Ok(())
+    }
+
+    #[test]
     fn ambiguous_submission_is_quarantined_after_expiry() -> Result<(), LedgerError> {
         let blockhash = Hash::new_from_array([109_u8; 32]);
-        let mut entry = TransactionLedgerEntry::reserve(900_000_000, blockhash, 500)?;
+        let lease = test_lease(blockhash, 500, 490);
+        let mut entry = TransactionLedgerEntry::reserve(900_000_000, lease)?;
         let signature = SignatureBytes {
             value: [113_u8; 64],
         };
@@ -1178,7 +1476,8 @@ mod tests {
     #[test]
     fn quarantined_failure_requires_resolution_before_release() -> Result<(), LedgerError> {
         let blockhash = Hash::new_from_array([119_u8; 32]);
-        let mut entry = TransactionLedgerEntry::reserve(800_000_000, blockhash, 700)?;
+        let lease = test_lease(blockhash, 700, 690);
+        let mut entry = TransactionLedgerEntry::reserve(800_000_000, lease)?;
         let signature = SignatureBytes {
             value: [121_u8; 64],
         };
@@ -1203,7 +1502,8 @@ mod tests {
     #[test]
     fn unsubmitted_transaction_can_release_after_expiry() -> Result<(), LedgerError> {
         let blockhash = Hash::new_from_array([123_u8; 32]);
-        let mut entry = TransactionLedgerEntry::reserve(600_000_000, blockhash, 800)?;
+        let lease = test_lease(blockhash, 800, 790);
+        let mut entry = TransactionLedgerEntry::reserve(600_000_000, lease)?;
         let signature = SignatureBytes {
             value: [125_u8; 64],
         };
@@ -1220,7 +1520,8 @@ mod tests {
     #[test]
     fn confirmed_submission_must_settle_before_capital_releases() -> Result<(), LedgerError> {
         let blockhash = Hash::new_from_array([127_u8; 32]);
-        let mut entry = TransactionLedgerEntry::reserve(700_000_000, blockhash, 900)?;
+        let lease = test_lease(blockhash, 900, 890);
+        let mut entry = TransactionLedgerEntry::reserve(700_000_000, lease)?;
         let signature = SignatureBytes {
             value: [131_u8; 64],
         };
@@ -1244,7 +1545,8 @@ mod tests {
     #[test]
     fn terminal_failure_requires_explicit_release() -> Result<(), LedgerError> {
         let blockhash = Hash::new_from_array([137_u8; 32]);
-        let mut entry = TransactionLedgerEntry::reserve(400_000_000, blockhash, 1_200)?;
+        let lease = test_lease(blockhash, 1_200, 1_190);
+        let mut entry = TransactionLedgerEntry::reserve(400_000_000, lease)?;
         let signature = SignatureBytes {
             value: [139_u8; 64],
         };
@@ -1268,7 +1570,8 @@ mod tests {
     #[test]
     fn invalid_lifecycle_transition_is_rejected() -> Result<(), LedgerError> {
         let blockhash = Hash::new_from_array([149_u8; 32]);
-        let mut entry = TransactionLedgerEntry::reserve(200_000_000, blockhash, 1_500)?;
+        let lease = test_lease(blockhash, 1_500, 1_490);
+        let mut entry = TransactionLedgerEntry::reserve(200_000_000, lease)?;
         let result = entry.mark_submitted();
 
         assert!(matches!(result, Err(LedgerError::InvalidTransition)));
