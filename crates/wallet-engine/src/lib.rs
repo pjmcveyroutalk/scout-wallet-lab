@@ -472,8 +472,8 @@ impl CanonicalTransactionMessage {
         }
 
         let message = Message::new_with_blockhash(instructions, Some(&payer), &recent_blockhash);
-        let bytes =
-            bincode::serialize(&message).map_err(|_| TransactionMessageError::SerializationFailed)?;
+        let bytes = bincode::serialize(&message)
+            .map_err(|_| TransactionMessageError::SerializationFailed)?;
 
         Ok(Self { bytes })
     }
