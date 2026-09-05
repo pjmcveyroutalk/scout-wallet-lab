@@ -636,10 +636,7 @@ impl TransactionLedgerEntry {
         Ok(())
     }
 
-    pub fn quarantine_if_expired(
-        &mut self,
-        current_block_height: u64,
-    ) -> Result<(), LedgerError> {
+    pub fn quarantine_if_expired(&mut self, current_block_height: u64) -> Result<(), LedgerError> {
         if current_block_height <= self.last_valid_block_height {
             return Err(LedgerError::BlockhashStillValid);
         }
