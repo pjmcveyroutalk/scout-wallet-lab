@@ -30,6 +30,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     match command.as_str() {
         "generate" => generate_wallet(&vault_path),
         "address" => print_address(&vault_path),
+        "verify" => verify_wallet(&vault_path),
         _ => Err(usage().into()),
     }
 }
@@ -45,15 +46,24 @@ fn generate_wallet(path: &Path) -> Result<(), Box<dyn Error>> {
 
     let passphrase = read_new_passphrase()?;
     let vault = LockedVault::generate(&passphrase)?;
-    let address = vault.devnet_account()?.address();
+
+    let verified_address = verify_vault_identity(&vault, &passphrase)?;
     let encoded = vault.to_json()?;
 
     write_new_vault(path, &encoded)?;
 
+    let persisted = load_vault(path)?;
+    let persisted_address = persisted.devnet_account()?.address().to_string();
+
+    if persisted_address != verified_address {
+        return Err("persisted wallet address does not match verified wallet identity".into());
+    }
+
     println!("Scout Wallet Lab Devnet wallet created.");
     println!("Cluster: devnet");
     println!("Vault: {}", path.display());
-    println!("Address: {address}");
+    println!("Address: {verified_address}");
+    println!("Identity verification: locked + unlocked + persisted match");
     println!("Mainnet: disabled");
     println!("Transaction submission: disabled");
 
@@ -61,17 +71,59 @@ fn generate_wallet(path: &Path) -> Result<(), Box<dyn Error>> {
 }
 
 fn print_address(path: &Path) -> Result<(), Box<dyn Error>> {
-    let encoded = fs::read_to_string(path)?;
-    let vault = LockedVault::from_json(&encoded)?;
+    let vault = load_vault(path)?;
     let account = vault.devnet_account()?;
 
     println!("Scout Wallet Lab");
     println!("Cluster: {}", account.cluster().rpc_name());
     println!("Address: {}", account.address());
+    println!("Source: encrypted vault public identity");
     println!("Mainnet: disabled");
     println!("Transaction submission: disabled");
 
     Ok(())
+}
+
+fn verify_wallet(path: &Path) -> Result<(), Box<dyn Error>> {
+    let vault = load_vault(path)?;
+    let passphrase = read_existing_passphrase()?;
+    let verified_address = verify_vault_identity(&vault, &passphrase)?;
+
+    println!("Scout Wallet Lab wallet identity verified.");
+    println!("Cluster: devnet");
+    println!("Address: {verified_address}");
+    println!("Identity verification: locked and unlocked identities match");
+    println!("Mainnet: disabled");
+    println!("Transaction submission: disabled");
+
+    Ok(())
+}
+
+fn verify_vault_identity(
+    vault: &LockedVault,
+    passphrase: &SecretPassphrase,
+) -> Result<String, Box<dyn Error>> {
+    let locked_public_key = vault.public_key()?;
+    let locked_account = vault.devnet_account()?;
+
+    let unlocked = vault.unlock(passphrase)?;
+    let unlocked_public_key = unlocked.public_key();
+    let unlocked_account = unlocked.devnet_account();
+
+    if locked_public_key != unlocked_public_key {
+        return Err("locked and unlocked wallet public keys do not match".into());
+    }
+
+    if locked_account.address() != unlocked_account.address() {
+        return Err("locked and unlocked Devnet addresses do not match".into());
+    }
+
+    Ok(locked_account.address().to_string())
+}
+
+fn load_vault(path: &Path) -> Result<LockedVault, Box<dyn Error>> {
+    let encoded = fs::read_to_string(path)?;
+    Ok(LockedVault::from_json(&encoded)?)
 }
 
 fn read_new_passphrase() -> Result<SecretPassphrase, Box<dyn Error>> {
@@ -87,6 +139,16 @@ fn read_new_passphrase() -> Result<SecretPassphrase, Box<dyn Error>> {
     }
 
     Ok(SecretPassphrase::new(first))
+}
+
+fn read_existing_passphrase() -> Result<SecretPassphrase, Box<dyn Error>> {
+    let value = read_line("Enter wallet passphrase: ")?;
+
+    if value.is_empty() {
+        return Err("wallet passphrase must not be empty".into());
+    }
+
+    Ok(SecretPassphrase::new(value))
 }
 
 fn read_line(prompt: &str) -> Result<String, Box<dyn Error>> {
@@ -126,7 +188,7 @@ fn write_new_vault(path: &Path, encoded: &str) -> Result<(), Box<dyn Error>> {
 
 fn usage() -> String {
     format!(
-        "usage: wallet_operator <generate|address> [vault-path]\n\
+        "usage: wallet_operator <generate|address|verify> [vault-path]\n\
          default vault path: {DEFAULT_VAULT_PATH}"
     )
 }
@@ -139,7 +201,7 @@ mod tests {
         time::{SystemTime, UNIX_EPOCH},
     };
 
-    use super::{print_address, write_new_vault};
+    use super::{load_vault, verify_vault_identity, write_new_vault};
     use wallet_engine::{LockedVault, SecretPassphrase, SecretSeed};
 
     fn unique_test_path() -> Result<PathBuf, Box<dyn std::error::Error>> {
@@ -168,8 +230,7 @@ mod tests {
     }
 
     #[test]
-    fn stored_vault_can_recover_devnet_address_without_unlocking(
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    fn stored_vault_recovers_same_devnet_address() -> Result<(), Box<dyn std::error::Error>> {
         let path = unique_test_path()?;
         let passphrase = SecretPassphrase::new("operator address test".to_owned());
         let vault = LockedVault::import_seed(&passphrase, SecretSeed::new([211_u8; 32]))?;
@@ -177,11 +238,56 @@ mod tests {
 
         write_new_vault(&path, &vault.to_json()?)?;
 
-        let encoded = fs::read_to_string(&path)?;
-        let loaded = LockedVault::from_json(&encoded)?;
+        let loaded = load_vault(&path)?;
 
         assert_eq!(loaded.devnet_account()?.address(), expected);
-        print_address(&path)?;
+
+        if let Some(parent) = path.parent() {
+            fs::remove_dir_all(parent)?;
+        }
+
+        Ok(())
+    }
+
+    #[test]
+    fn locked_and_unlocked_wallet_identity_must_match(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let passphrase = SecretPassphrase::new("identity verification test".to_owned());
+        let vault = LockedVault::import_seed(&passphrase, SecretSeed::new([212_u8; 32]))?;
+
+        let verified_address = verify_vault_identity(&vault, &passphrase)?;
+
+        assert_eq!(
+            verified_address,
+            vault.devnet_account()?.address().to_string()
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn identity_verification_rejects_wrong_passphrase(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let correct = SecretPassphrase::new("correct operator passphrase".to_owned());
+        let wrong = SecretPassphrase::new("incorrect operator passphrase".to_owned());
+        let vault = LockedVault::import_seed(&correct, SecretSeed::new([213_u8; 32]))?;
+
+        assert!(verify_vault_identity(&vault, &wrong).is_err());
+
+        Ok(())
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn vault_file_is_created_owner_only() -> Result<(), Box<dyn std::error::Error>> {
+        use std::os::unix::fs::PermissionsExt;
+
+        let path = unique_test_path()?;
+
+        write_new_vault(&path, "{\"vault\":true}")?;
+
+        let mode = fs::metadata(&path)?.permissions().mode() & 0o777;
+        assert_eq!(mode, 0o600);
 
         if let Some(parent) = path.parent() {
             fs::remove_dir_all(parent)?;
