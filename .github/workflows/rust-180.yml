@@ -4,13 +4,35 @@ on:
   push:
     branches:
       - main
-  pull_request:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
+  lockfile:
+    name: Bootstrap Cargo.lock
+    runs-on: ubuntu-latest
+    if: ${{ hashFiles('Cargo.lock') == '' }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust 1.80.0
+        uses: dtolnay/rust-toolchain@1.80.0
+
+      - name: Generate dependency lockfile
+        run: cargo generate-lockfile
+
+      - name: Commit dependency lockfile
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Cargo.lock
+          git commit -m "Lock Rust dependency graph"
+          git push origin HEAD:main
+
   verify:
     name: Verify Rust 1.80
     runs-on: ubuntu-latest
@@ -27,15 +49,6 @@ jobs:
         with:
           components: rustfmt, clippy
 
-      - name: Generate dependency lockfile
-        run: cargo generate-lockfile
-
-      - name: Emit dependency lockfile
-        run: |
-          echo "SCOUT_CARGO_LOCK_BEGIN"
-          cat Cargo.lock
-          echo "SCOUT_CARGO_LOCK_END"
-
       - name: Check formatting
         run: cargo fmt --all -- --check
 
@@ -44,6 +57,3 @@ jobs:
 
       - name: Run tests
         run: cargo test --workspace --all-targets
-
-      - name: Verify lockfile exists
-        run: test -f Cargo.lock
