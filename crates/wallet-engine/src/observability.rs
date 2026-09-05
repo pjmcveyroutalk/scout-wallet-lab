@@ -1,5 +1,5 @@
 use crate::{
-    Cluster, DevnetAccount, SignerState, TransactionLedgerEntry, TransactionState, UnlockedWallet,
+    DevnetAccount, SignerState, TransactionLedgerEntry, TransactionState, UnlockedWallet,
 };
 use serde::Serialize;
 
@@ -171,8 +171,8 @@ const fn transaction_state_name(state: TransactionState) -> &'static str {
 mod tests {
     use super::WalletObservabilitySnapshot;
     use crate::{
-        BlockhashLease, LockedVault, SecretPassphrase, SecretSeed, TransactionLedgerEntry,
-        VaultError,
+        BlockhashLease, Cluster, LockedVault, SecretPassphrase, SecretSeed,
+        TransactionLedgerEntry, VaultError,
     };
     use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
     use solana_hash::Hash;
