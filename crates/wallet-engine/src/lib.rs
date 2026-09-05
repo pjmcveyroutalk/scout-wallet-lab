@@ -1530,9 +1530,12 @@ mod tests {
             accounts: Vec::new(),
             data: vec![1_u8],
         };
-        let canonical =
-            CanonicalTransactionMessage::new(&[instruction], payer, Hash::new_from_array([102; 32]))
-                .map_err(|_| VaultError::SerializationFailed)?;
+        let canonical = CanonicalTransactionMessage::new(
+            &[instruction],
+            payer,
+            Hash::new_from_array([102; 32]),
+        )
+        .map_err(|_| VaultError::SerializationFailed)?;
         let authorized = AuthorizedTransactionMessage::new(&canonical);
 
         unlocked.emergency_lock();
@@ -1786,3 +1789,4 @@ mod tests {
         Ok(())
     }
 }
+```1
