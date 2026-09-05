@@ -34,7 +34,11 @@
       margin: 0;
       min-height: 100vh;
       background:
-        radial-gradient(circle at top, rgba(63, 118, 181, 0.14), transparent 38%),
+        radial-gradient(
+          circle at top,
+          rgba(63, 118, 181, 0.14),
+          transparent 38%
+        ),
         var(--background);
       color: var(--text);
       font-family:
@@ -50,6 +54,12 @@
     button {
       font: inherit;
       cursor: pointer;
+    }
+
+    h1,
+    h2,
+    p {
+      margin: 0;
     }
 
     .shell {
@@ -87,17 +97,10 @@
       background: var(--surface-raised);
       box-shadow: var(--shadow);
       font-weight: 800;
-      letter-spacing: -0.04em;
     }
 
     .title-wrap {
       min-width: 0;
-    }
-
-    h1,
-    h2,
-    p {
-      margin: 0;
     }
 
     h1 {
@@ -133,15 +136,42 @@
       box-shadow: 0 0 14px currentColor;
     }
 
-    .warning {
+    .warning,
+    .funding-gate {
       margin-bottom: 18px;
       padding: 13px 15px;
-      border: 1px solid rgba(244, 196, 83, 0.32);
       border-radius: 14px;
-      background: rgba(244, 196, 83, 0.07);
-      color: #ffe6a7;
       font-size: 0.8rem;
       line-height: 1.45;
+    }
+
+    .warning {
+      border: 1px solid rgba(244, 196, 83, 0.32);
+      background: rgba(244, 196, 83, 0.07);
+      color: #ffe6a7;
+    }
+
+    .funding-gate {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      border: 1px solid var(--border);
+      background: rgba(14, 26, 43, 0.82);
+    }
+
+    .funding-gate-copy {
+      min-width: 0;
+    }
+
+    .funding-gate-title {
+      font-weight: 800;
+    }
+
+    .funding-gate-note {
+      margin-top: 3px;
+      color: var(--muted);
+      font-size: 0.72rem;
     }
 
     .bridge {
@@ -199,7 +229,6 @@
     .card-title {
       font-size: 0.86rem;
       font-weight: 750;
-      letter-spacing: 0.01em;
     }
 
     .card-note {
@@ -290,7 +319,12 @@
       border-radius: 12px;
       background: rgba(0, 0, 0, 0.18);
       color: #d6e7fb;
-      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-family:
+        ui-monospace,
+        SFMono-Regular,
+        Menlo,
+        Consolas,
+        monospace;
       font-size: 0.72rem;
       line-height: 1.5;
     }
@@ -357,16 +391,6 @@
       font-weight: 750;
     }
 
-    .empty {
-      padding: 26px 14px;
-      border: 1px dashed rgba(159, 176, 198, 0.21);
-      border-radius: 14px;
-      color: var(--muted);
-      text-align: center;
-      font-size: 0.78rem;
-      line-height: 1.5;
-    }
-
     .security-footer {
       margin-top: 18px;
       color: var(--muted);
@@ -426,6 +450,18 @@
       payloads must never enter the browser or Vercel environment.
     </div>
 
+    <div class="funding-gate">
+      <div class="funding-gate-copy">
+        <div class="funding-gate-title">Devnet funding gate</div>
+        <div class="funding-gate-note">
+          Green only after verified wallet identity and a real RPC balance
+          observation are present in the Scout-generated snapshot.
+        </div>
+      </div>
+
+      <span class="status yellow" id="funding-status">Not verified</span>
+    </div>
+
     <div class="bridge">
       <span class="bridge-label">Observability bridge</span>
       <span class="bridge-value" id="bridge-status">Waiting for snapshot</span>
@@ -439,10 +475,7 @@
             <p class="card-note">Emergency signing boundary</p>
           </div>
 
-          <span class="status yellow" id="signer-status">
-            <span class="dot" aria-hidden="true"></span>
-            Unknown
-          </span>
+          <span class="status yellow" id="signer-status">Unknown</span>
         </div>
 
         <div class="key-value">
@@ -465,12 +498,10 @@
         <div class="card-header">
           <div>
             <h2 class="card-title">Balance</h2>
-            <p class="card-note">Read-only devnet account view</p>
+            <p class="card-note">Verified Devnet RPC account observation</p>
           </div>
 
-          <span class="status yellow" id="balance-status">
-            Awaiting engine
-          </span>
+          <span class="status yellow" id="balance-status">Awaiting engine</span>
         </div>
 
         <div class="metric">
@@ -479,7 +510,17 @@
         </div>
 
         <div class="address" id="wallet-address">
-          Public address will be supplied by the wallet engine.
+          Verified wallet address not available.
+        </div>
+
+        <div class="key-value">
+          <span class="key">Address validation</span>
+          <span class="value" id="address-validation">Not verified</span>
+        </div>
+
+        <div class="key-value">
+          <span class="key">RPC balance state</span>
+          <span class="value" id="rpc-balance-state">Not observed</span>
         </div>
       </article>
 
@@ -490,24 +531,22 @@
             <p class="card-note">Ledger-controlled exposure</p>
           </div>
 
-          <span class="status green" id="capital-status">
-            Protected
-          </span>
+          <span class="status yellow" id="capital-status">Unknown</span>
         </div>
 
         <div class="metric">
-          <span id="reserved-lamports">0</span>
+          <span id="reserved-lamports">—</span>
           <span class="metric-unit">lamports</span>
         </div>
 
         <div class="key-value">
           <span class="key">Capital reserved</span>
-          <span class="value" id="capital-reserved">No</span>
+          <span class="value" id="capital-reserved">—</span>
         </div>
 
         <div class="key-value">
           <span class="key">Signature present</span>
-          <span class="value" id="signature-present">No</span>
+          <span class="value" id="signature-present">—</span>
         </div>
       </article>
 
@@ -516,11 +555,11 @@
           <div>
             <h2 class="card-title">Execution policy</h2>
             <p class="card-note">
-              Dashboard can observe policy results but cannot mint authorization.
+              Dashboard observes policy state but cannot authorize signing.
             </p>
           </div>
 
-          <span class="status green">Enforced</span>
+          <span class="status yellow">Engine owned</span>
         </div>
 
         <div class="policy-list">
@@ -556,8 +595,7 @@
           <div>
             <h2 class="card-title">Controls</h2>
             <p class="card-note">
-              Signing controls remain disabled until a separately authenticated
-              trusted control bridge exists.
+              Signing controls remain unavailable from the browser.
             </p>
           </div>
 
@@ -592,7 +630,7 @@
           </div>
 
           <span class="status yellow" id="transaction-status">
-            No transaction
+            No observation
           </span>
         </div>
 
@@ -608,7 +646,9 @@
           </div>
 
           <div class="event">
-            <span class="event-title">Retry delivery allowed</span>
+            <span class="event-title">
+              Retry delivery at recorded last-valid height
+            </span>
             <span class="event-state" id="retry-allowed">—</span>
           </div>
 
@@ -624,13 +664,11 @@
           <div>
             <h2 class="card-title">Snapshot integrity</h2>
             <p class="card-note">
-              Browser accepts only the locked Scout Wallet Lab devnet schema.
+              Browser accepts only the locked Scout Wallet Lab Devnet schema.
             </p>
           </div>
 
-          <span class="status yellow" id="snapshot-status">
-            Waiting
-          </span>
+          <span class="status yellow" id="snapshot-status">Waiting</span>
         </div>
 
         <div class="key-value">
@@ -644,8 +682,13 @@
         </div>
 
         <div class="key-value">
-          <span class="key">Signing material accepted</span>
-          <span class="value">Never</span>
+          <span class="key">Address format</span>
+          <span class="value">Canonical 32-byte Solana pubkey</span>
+        </div>
+
+        <div class="key-value">
+          <span class="key">Balance required</span>
+          <span class="value">Yes</span>
         </div>
 
         <div class="key-value">
@@ -694,7 +737,7 @@
     </section>
 
     <footer class="security-footer">
-      Scout Wallet Lab · devnet safety surface · no production funds
+      Scout Wallet Lab · Devnet safety surface · no production funds
     </footer>
   </main>
 
@@ -704,15 +747,21 @@
     const SNAPSHOT_URL = "./wallet-observability.json";
     const EXPECTED_ENGINE = "scout-wallet-lab";
     const EXPECTED_CLUSTER = "devnet";
+    const BASE58_ALPHABET =
+      "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
 
     const bridgeStatus = document.getElementById("bridge-status");
     const signerStatus = document.getElementById("signer-status");
     const balanceStatus = document.getElementById("balance-status");
+    const fundingStatus = document.getElementById("funding-status");
     const snapshotStatus = document.getElementById("snapshot-status");
     const transactionStatus = document.getElementById("transaction-status");
+    const capitalStatus = document.getElementById("capital-status");
     const clusterValue = document.getElementById("cluster-value");
     const balanceValue = document.getElementById("balance-value");
     const walletAddress = document.getElementById("wallet-address");
+    const addressValidation = document.getElementById("address-validation");
+    const rpcBalanceState = document.getElementById("rpc-balance-state");
     const reservedLamports = document.getElementById("reserved-lamports");
     const capitalReserved = document.getElementById("capital-reserved");
     const signaturePresent = document.getElementById("signature-present");
@@ -732,6 +781,10 @@
       return value ? "Yes" : "No";
     }
 
+    function isNonNegativeInteger(value) {
+      return Number.isSafeInteger(value) && value >= 0;
+    }
+
     function lamportsToSol(lamports) {
       return (lamports / 1_000_000_000).toLocaleString(
         undefined,
@@ -740,10 +793,6 @@
           maximumFractionDigits: 9
         }
       );
-    }
-
-    function isNonNegativeInteger(value) {
-      return Number.isSafeInteger(value) && value >= 0;
     }
 
     function hasExactKeys(value, expectedKeys) {
@@ -765,6 +814,72 @@
       );
     }
 
+    function decodeBase58(value) {
+      if (typeof value !== "string" || value.length === 0) {
+        return null;
+      }
+
+      const bytes = [0];
+
+      for (const character of value) {
+        const digit = BASE58_ALPHABET.indexOf(character);
+
+        if (digit === -1) {
+          return null;
+        }
+
+        let carry = digit;
+
+        for (let index = 0; index < bytes.length; index += 1) {
+          carry += bytes[index] * 58;
+          bytes[index] = carry & 0xff;
+          carry >>= 8;
+        }
+
+        while (carry > 0) {
+          bytes.push(carry & 0xff);
+          carry >>= 8;
+        }
+      }
+
+      let leadingZeroes = 0;
+
+      while (
+        leadingZeroes < value.length &&
+        value[leadingZeroes] === "1"
+      ) {
+        leadingZeroes += 1;
+      }
+
+      const decoded = new Uint8Array(
+        leadingZeroes + bytes.length
+      );
+
+      for (let index = 0; index < bytes.length; index += 1) {
+        decoded[decoded.length - 1 - index] = bytes[index];
+      }
+
+      return decoded;
+    }
+
+    function isCanonicalSolanaAddress(value) {
+      if (
+        typeof value !== "string" ||
+        value.length < 32 ||
+        value.length > 44
+      ) {
+        return false;
+      }
+
+      const decoded = decodeBase58(value);
+
+      if (!decoded || decoded.length !== 32) {
+        return false;
+      }
+
+      return true;
+    }
+
     function validateSigner(value) {
       if (
         !hasExactKeys(
@@ -778,7 +893,10 @@
         return false;
       }
 
-      if (value.state !== "running" && value.state !== "locked") {
+      if (
+        value.state !== "running" &&
+        value.state !== "locked"
+      ) {
         return false;
       }
 
@@ -832,7 +950,8 @@
         isNonNegativeInteger(value.last_valid_block_height) &&
         typeof value.signature_present === "boolean" &&
         typeof value.capital_reserved === "boolean" &&
-        typeof value.retry_delivery_allowed_at_last_valid_height === "boolean" &&
+        typeof value.retry_delivery_allowed_at_last_valid_height ===
+          "boolean" &&
         typeof value.rebuild_economic_intent_allowed === "boolean"
       );
     }
@@ -862,14 +981,11 @@
         return false;
       }
 
-      if (typeof snapshot.address !== "string" || snapshot.address.length === 0) {
+      if (!isCanonicalSolanaAddress(snapshot.address)) {
         return false;
       }
 
-      if (
-        snapshot.lamports !== null &&
-        !isNonNegativeInteger(snapshot.lamports)
-      ) {
+      if (!isNonNegativeInteger(snapshot.lamports)) {
         return false;
       }
 
@@ -878,6 +994,17 @@
       }
 
       return validateTransaction(snapshot.transaction);
+    }
+
+    function resetAuthoritativeWalletState() {
+      balanceValue.textContent = "—";
+      walletAddress.textContent =
+        "Verified wallet address not available.";
+      addressValidation.textContent = "Not verified";
+      rpcBalanceState.textContent = "Not observed";
+
+      setStatus(balanceStatus, "Unavailable", "yellow");
+      setStatus(fundingStatus, "Not verified", "yellow");
     }
 
     function renderSigner(signer) {
@@ -892,15 +1019,14 @@
     function renderBalance(snapshot) {
       clusterValue.textContent = snapshot.cluster;
       walletAddress.textContent = snapshot.address;
-
-      if (snapshot.lamports === null) {
-        balanceValue.textContent = "—";
-        setStatus(balanceStatus, "Unknown", "yellow");
-        return;
-      }
-
       balanceValue.textContent = lamportsToSol(snapshot.lamports);
-      setStatus(balanceStatus, "Observed", "green");
+      addressValidation.textContent =
+        "Verified Scout wallet identity";
+      rpcBalanceState.textContent =
+        "Confirmed Devnet RPC observation";
+
+      setStatus(balanceStatus, "RPC verified", "green");
+      setStatus(fundingStatus, "Identity + balance verified", "green");
     }
 
     function renderTransaction(transaction) {
@@ -912,6 +1038,8 @@
         lastValidHeight.textContent = "—";
         retryAllowed.textContent = "—";
         rebuildAllowed.textContent = "—";
+
+        setStatus(capitalStatus, "No reservation", "green");
         setStatus(transactionStatus, "No transaction", "green");
         return;
       }
@@ -940,11 +1068,26 @@
           transaction.rebuild_economic_intent_allowed
         );
 
+      if (transaction.capital_reserved) {
+        setStatus(capitalStatus, "Reserved", "yellow");
+      } else {
+        setStatus(capitalStatus, "Released", "green");
+      }
+
       if (
         transaction.state === "ambiguous" ||
         transaction.state === "quarantined"
       ) {
         setStatus(transactionStatus, transaction.state, "red");
+        return;
+      }
+
+      if (
+        transaction.state === "submitted" ||
+        transaction.state === "signed" ||
+        transaction.state === "reserved"
+      ) {
+        setStatus(transactionStatus, transaction.state, "yellow");
         return;
       }
 
@@ -956,18 +1099,31 @@
       renderBalance(snapshot);
       renderTransaction(snapshot.transaction);
 
-      bridgeStatus.textContent = "Safe snapshot connected";
+      bridgeStatus.textContent =
+        "Verified Scout snapshot connected";
+
       setStatus(snapshotStatus, "Validated", "green");
     }
 
     function renderDisconnected(message) {
+      resetAuthoritativeWalletState();
+
       bridgeStatus.textContent = message;
+
       setStatus(snapshotStatus, "Disconnected", "yellow");
+      setStatus(capitalStatus, "Unknown", "yellow");
+      setStatus(transactionStatus, "No observation", "yellow");
     }
 
     function renderRejected() {
+      resetAuthoritativeWalletState();
+
       bridgeStatus.textContent = "Snapshot rejected";
+
       setStatus(snapshotStatus, "Rejected", "red");
+      setStatus(fundingStatus, "Do not fund", "red");
+      setStatus(capitalStatus, "Unknown", "yellow");
+      setStatus(transactionStatus, "No observation", "yellow");
     }
 
     async function loadSnapshot() {
@@ -984,7 +1140,9 @@
         );
 
         if (!response.ok) {
-          renderDisconnected("Engine snapshot not published yet");
+          renderDisconnected(
+            "Engine snapshot not published yet"
+          );
           return;
         }
 
@@ -997,7 +1155,9 @@
 
         renderSnapshot(snapshot);
       } catch {
-        renderDisconnected("Engine snapshot not published yet");
+        renderDisconnected(
+          "Engine snapshot not published yet"
+        );
       } finally {
         refreshButton.disabled = false;
       }
@@ -1005,6 +1165,7 @@
 
     refreshButton.addEventListener("click", loadSnapshot);
 
+    resetAuthoritativeWalletState();
     loadSnapshot();
   </script>
 </body>
