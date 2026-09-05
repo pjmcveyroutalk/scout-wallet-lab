@@ -7,9 +7,10 @@ use chacha20poly1305::{
     KeyInit, XChaCha20Poly1305, XNonce,
 };
 use ed25519_dalek::{Signer as _, SigningKey};
+use rustls::crypto::CryptoProvider;
 use serde::{Deserialize, Serialize};
 use solana_pubkey::Pubkey;
-use std::fmt;
+use std::{fmt, time::Duration};
 use zeroize::{Zeroize, Zeroizing};
 
 const VAULT_VERSION: u8 = 1;
@@ -26,6 +27,10 @@ const ARGON2_MEMORY_KIB: u32 = 65_536;
 const ARGON2_ITERATIONS: u32 = 3;
 const ARGON2_LANES: u32 = 1;
 
+const DEVNET_RPC_URL: &str = "https://api.devnet.solana.com";
+const RPC_TIMEOUT_SECONDS: u64 = 10;
+const RPC_REQUEST_ID: u64 = 1;
+
 #[must_use]
 pub const fn engine_name() -> &'static str {
     "scout-wallet-lab"
@@ -41,6 +46,13 @@ impl Cluster {
     pub const fn rpc_name(self) -> &'static str {
         match self {
             Self::Devnet => "devnet",
+        }
+    }
+
+    #[must_use]
+    pub const fn rpc_url(self) -> &'static str {
+        match self {
+            Self::Devnet => DEVNET_RPC_URL,
         }
     }
 }
@@ -81,6 +93,141 @@ impl DevnetAccount {
 
     pub fn clear_balance(&mut self) {
         self.lamports = None;
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RpcError {
+    TlsInitializationFailed,
+    ClientInitializationFailed,
+    TransportFailed,
+    HttpStatusFailed,
+    InvalidResponse,
+    RpcRejected,
+}
+
+impl fmt::Display for RpcError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let message = match self {
+            Self::TlsInitializationFailed => "RPC TLS initialization failed",
+            Self::ClientInitializationFailed => "RPC client initialization failed",
+            Self::TransportFailed => "RPC transport failed",
+            Self::HttpStatusFailed => "RPC HTTP status rejected",
+            Self::InvalidResponse => "RPC response was invalid",
+            Self::RpcRejected => "RPC request was rejected",
+        };
+        formatter.write_str(message)
+    }
+}
+
+impl std::error::Error for RpcError {}
+
+pub struct DevnetRpc {
+    client: reqwest::Client,
+}
+
+#[derive(Serialize)]
+struct GetBalanceRequest {
+    jsonrpc: &'static str,
+    id: u64,
+    method: &'static str,
+    params: (String, RpcCommitment),
+}
+
+#[derive(Serialize)]
+struct RpcCommitment {
+    commitment: &'static str,
+}
+
+#[derive(Deserialize)]
+struct GetBalanceResponse {
+    result: Option<GetBalanceResult>,
+    error: Option<serde_json::Value>,
+}
+
+#[derive(Deserialize)]
+struct GetBalanceResult {
+    value: u64,
+}
+
+impl DevnetRpc {
+    pub fn new() -> Result<Self, RpcError> {
+        ensure_tls_provider()?;
+
+        let client = reqwest::Client::builder()
+            .timeout(Duration::from_secs(RPC_TIMEOUT_SECONDS))
+            .build()
+            .map_err(|_| RpcError::ClientInitializationFailed)?;
+
+        Ok(Self { client })
+    }
+
+    pub async fn get_balance(&self, address: Pubkey) -> Result<u64, RpcError> {
+        let request = build_get_balance_request(address);
+
+        let response = self
+            .client
+            .post(Cluster::Devnet.rpc_url())
+            .json(&request)
+            .send()
+            .await
+            .map_err(|_| RpcError::TransportFailed)?;
+
+        if !response.status().is_success() {
+            return Err(RpcError::HttpStatusFailed);
+        }
+
+        let response = response
+            .json::<GetBalanceResponse>()
+            .await
+            .map_err(|_| RpcError::InvalidResponse)?;
+
+        if response.error.is_some() {
+            return Err(RpcError::RpcRejected);
+        }
+
+        response
+            .result
+            .map(|result| result.value)
+            .ok_or(RpcError::InvalidResponse)
+    }
+
+    pub async fn refresh_balance(&self, account: &mut DevnetAccount) -> Result<u64, RpcError> {
+        account.clear_balance();
+
+        let result = self.get_balance(account.address()).await;
+
+        match result {
+            Ok(lamports) => {
+                account.record_balance(lamports);
+                Ok(lamports)
+            }
+            Err(error) => Err(error),
+        }
+    }
+}
+
+fn ensure_tls_provider() -> Result<(), RpcError> {
+    if CryptoProvider::get_default().is_some() {
+        return Ok(());
+    }
+
+    rustls::crypto::ring::default_provider()
+        .install_default()
+        .map_err(|_| RpcError::TlsInitializationFailed)
+}
+
+fn build_get_balance_request(address: Pubkey) -> GetBalanceRequest {
+    GetBalanceRequest {
+        jsonrpc: "2.0",
+        id: RPC_REQUEST_ID,
+        method: "getBalance",
+        params: (
+            address.to_string(),
+            RpcCommitment {
+                commitment: "confirmed",
+            },
+        ),
     }
 }
 
@@ -419,8 +566,8 @@ fn decode_array<const N: usize>(encoded: &str) -> Result<[u8; N], VaultError> {
 #[cfg(test)]
 mod tests {
     use super::{
-        AuthorizedMessage, Cluster, LockedVault, SecretPassphrase, SecretSeed, SignerError,
-        VaultError, CIPHERTEXT_LEN, VAULT_VERSION,
+        build_get_balance_request, AuthorizedMessage, Cluster, LockedVault, SecretPassphrase,
+        SecretSeed, SignerError, VaultError, CIPHERTEXT_LEN, VAULT_VERSION,
     };
     use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
     use ed25519_dalek::{Signature, Verifier as _, VerifyingKey};
@@ -571,6 +718,7 @@ mod tests {
         assert_eq!(account.address(), expected);
         assert_eq!(account.cluster(), Cluster::Devnet);
         assert_eq!(account.cluster().rpc_name(), "devnet");
+        assert_eq!(account.cluster().rpc_url(), "https://api.devnet.solana.com");
         assert_eq!(account.lamports(), None);
         Ok(())
     }
@@ -600,6 +748,23 @@ mod tests {
 
         account.clear_balance();
         assert_eq!(account.lamports(), None);
+        Ok(())
+    }
+
+    #[test]
+    fn devnet_rpc_request_is_read_only_and_fixed() -> Result<(), VaultError> {
+        let passphrase = SecretPassphrase::new("rpc request test".to_owned());
+        let vault = LockedVault::import_seed(&passphrase, SecretSeed::new([61_u8; 32]))?;
+        let account = vault.devnet_account()?;
+        let request = build_get_balance_request(account.address());
+        let encoded =
+            serde_json::to_value(request).map_err(|_| VaultError::SerializationFailed)?;
+
+        assert_eq!(encoded["jsonrpc"], "2.0");
+        assert_eq!(encoded["id"], 1);
+        assert_eq!(encoded["method"], "getBalance");
+        assert_eq!(encoded["params"][0], account.address().to_string());
+        assert_eq!(encoded["params"][1]["commitment"], "confirmed");
         Ok(())
     }
 }
