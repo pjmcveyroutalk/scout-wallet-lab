@@ -378,9 +378,7 @@ mod tests {
             .decode(&vault.ciphertext_b64)
             .map_err(|_| VaultError::InvalidFormat)?;
 
-        let first_byte = ciphertext
-            .first_mut()
-            .ok_or(VaultError::InvalidFormat)?;
+        let first_byte = ciphertext.first_mut().ok_or(VaultError::InvalidFormat)?;
         *first_byte ^= 1;
         vault.ciphertext_b64 = BASE64.encode(ciphertext);
 
