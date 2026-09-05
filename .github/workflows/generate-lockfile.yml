@@ -1,0 +1,32 @@
+name: Generate Cargo Lockfile
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  generate:
+    name: Generate Rust 1.80 lockfile
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust 1.80.0
+        uses: dtolnay/rust-toolchain@1.80.0
+
+      - name: Generate lockfile
+        run: cargo generate-lockfile
+
+      - name: Verify resolved graph
+        run: cargo metadata --locked --format-version 1 --no-deps >/dev/null
+
+      - name: Upload generated lockfile
+        uses: actions/upload-artifact@v4
+        with:
+          name: cargo-lock-rust-180
+          path: Cargo.lock
+          if-no-files-found: error
