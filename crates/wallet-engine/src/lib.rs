@@ -60,7 +60,7 @@ impl SecretSeed {
     }
 
     fn expose(&self) -> &[u8; SEED_LEN] {
-        self.value.as_ref()
+        &self.value
     }
 }
 
@@ -210,7 +210,7 @@ impl LockedVault {
 
         let mut seed = Zeroizing::new([0_u8; SEED_LEN]);
         seed.as_mut().copy_from_slice(plaintext.as_slice());
-        let signing_key = SigningKey::from_bytes(seed.as_ref());
+        let signing_key = SigningKey::from_bytes(&seed);
         let actual_public_key = signing_key.verifying_key().to_bytes();
 
         if actual_public_key != expected_public_key {
