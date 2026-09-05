@@ -30,6 +30,12 @@ jobs:
       - name: Generate dependency lockfile
         run: cargo generate-lockfile
 
+      - name: Emit dependency lockfile
+        run: |
+          echo "SCOUT_CARGO_LOCK_BEGIN"
+          cat Cargo.lock
+          echo "SCOUT_CARGO_LOCK_END"
+
       - name: Check formatting
         run: cargo fmt --all -- --check
 
