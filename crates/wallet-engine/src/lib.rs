@@ -437,6 +437,7 @@ pub enum TransactionState {
     Confirmed,
     Failed,
     Ambiguous,
+    Quarantined,
     Settled,
     Released,
 }
@@ -446,6 +447,7 @@ pub enum LedgerError {
     ZeroReservation,
     InvalidTransition,
     BlockhashStillValid,
+    OutcomeUnresolved,
 }
 
 impl fmt::Display for LedgerError {
@@ -454,6 +456,7 @@ impl fmt::Display for LedgerError {
             Self::ZeroReservation => "transaction reservation must be greater than zero",
             Self::InvalidTransition => "transaction lifecycle transition is invalid",
             Self::BlockhashStillValid => "transaction blockhash is still valid",
+            Self::OutcomeUnresolved => "submitted transaction outcome remains unresolved",
         };
         formatter.write_str(message)
     }
@@ -565,7 +568,9 @@ impl TransactionLedgerEntry {
     pub fn mark_confirmed(&mut self) -> Result<(), LedgerError> {
         if !matches!(
             self.state,
-            TransactionState::Submitted | TransactionState::Ambiguous
+            TransactionState::Submitted
+                | TransactionState::Ambiguous
+                | TransactionState::Quarantined
         ) {
             return Err(LedgerError::InvalidTransition);
         }
@@ -577,7 +582,9 @@ impl TransactionLedgerEntry {
     pub fn mark_failed(&mut self) -> Result<(), LedgerError> {
         if !matches!(
             self.state,
-            TransactionState::Submitted | TransactionState::Ambiguous
+            TransactionState::Submitted
+                | TransactionState::Ambiguous
+                | TransactionState::Quarantined
         ) {
             return Err(LedgerError::InvalidTransition);
         }
@@ -609,17 +616,42 @@ impl TransactionLedgerEntry {
             return Err(LedgerError::BlockhashStillValid);
         }
 
+        if matches!(
+            self.state,
+            TransactionState::Submitted
+                | TransactionState::Ambiguous
+                | TransactionState::Quarantined
+        ) {
+            return Err(LedgerError::OutcomeUnresolved);
+        }
+
         if !matches!(
             self.state,
-            TransactionState::Reserved
-                | TransactionState::Signed
-                | TransactionState::Submitted
-                | TransactionState::Ambiguous
+            TransactionState::Reserved | TransactionState::Signed
         ) {
             return Err(LedgerError::InvalidTransition);
         }
 
         self.state = TransactionState::Released;
+        Ok(())
+    }
+
+    pub fn quarantine_if_expired(
+        &mut self,
+        current_block_height: u64,
+    ) -> Result<(), LedgerError> {
+        if current_block_height <= self.last_valid_block_height {
+            return Err(LedgerError::BlockhashStillValid);
+        }
+
+        if !matches!(
+            self.state,
+            TransactionState::Submitted | TransactionState::Ambiguous
+        ) {
+            return Err(LedgerError::InvalidTransition);
+        }
+
+        self.state = TransactionState::Quarantined;
         Ok(())
     }
 }
@@ -713,488 +745,4 @@ impl LockedVault {
         let mut nonce = [0_u8; NONCE_LEN];
         getrandom::getrandom(&mut nonce).map_err(|_| VaultError::RandomnessUnavailable)?;
 
-        let kdf = KdfParameters::current();
-        let key = derive_key(passphrase, &salt, &kdf)?;
-        let cipher = XChaCha20Poly1305::new_from_slice(key.as_ref())
-            .map_err(|_| VaultError::EncryptionFailed)?;
-        let ciphertext = cipher
-            .encrypt(
-                XNonce::from_slice(&nonce),
-                Payload {
-                    msg: seed,
-                    aad: AAD,
-                },
-            )
-            .map_err(|_| VaultError::EncryptionFailed)?;
-
-        Ok(Self {
-            version: VAULT_VERSION,
-            public_key_b64: BASE64.encode(public_key),
-            salt_b64: BASE64.encode(salt),
-            nonce_b64: BASE64.encode(nonce),
-            ciphertext_b64: BASE64.encode(ciphertext),
-            kdf,
-        })
-    }
-
-    fn validate_metadata(&self) -> Result<(), VaultError> {
-        if self.version != VAULT_VERSION {
-            return Err(VaultError::UnsupportedVersion);
-        }
-        if self.kdf != KdfParameters::current() {
-            return Err(VaultError::InvalidFormat);
-        }
-
-        decode_array::<32>(&self.public_key_b64)?;
-        decode_array::<SALT_LEN>(&self.salt_b64)?;
-        decode_array::<NONCE_LEN>(&self.nonce_b64)?;
-
-        let ciphertext = BASE64
-            .decode(&self.ciphertext_b64)
-            .map_err(|_| VaultError::InvalidFormat)?;
-        if ciphertext.len() != CIPHERTEXT_LEN {
-            return Err(VaultError::InvalidFormat);
-        }
-
-        Ok(())
-    }
-}
-
-impl UnlockedWallet {
-    #[must_use]
-    pub fn public_key(&self) -> [u8; 32] {
-        self.signing_key.verifying_key().to_bytes()
-    }
-
-    #[must_use]
-    pub fn devnet_account(&self) -> DevnetAccount {
-        DevnetAccount::new(Pubkey::new_from_array(self.public_key()))
-    }
-
-    pub fn sign_authorized(
-        &self,
-        message: &AuthorizedMessage<'_>,
-    ) -> Result<SignatureBytes, SignerError> {
-        let signature = self.signing_key.sign(message.as_bytes());
-
-        Ok(SignatureBytes {
-            value: signature.to_bytes(),
-        })
-    }
-
-    #[must_use]
-    pub fn sign_transaction_message(
-        &self,
-        message: &AuthorizedTransactionMessage<'_>,
-    ) -> SignatureBytes {
-        let signature = self.signing_key.sign(message.as_bytes());
-
-        SignatureBytes {
-            value: signature.to_bytes(),
-        }
-    }
-}
-
-impl KdfParameters {
-    fn current() -> Self {
-        Self {
-            algorithm: "argon2id-v19".to_owned(),
-            memory_kib: ARGON2_MEMORY_KIB,
-            iterations: ARGON2_ITERATIONS,
-            lanes: ARGON2_LANES,
-            output_len: KEY_LEN,
-        }
-    }
-}
-
-fn derive_key(
-    passphrase: &SecretPassphrase,
-    salt: &[u8; SALT_LEN],
-    parameters: &KdfParameters,
-) -> Result<Zeroizing<[u8; KEY_LEN]>, VaultError> {
-    let params = Params::new(
-        parameters.memory_kib,
-        parameters.iterations,
-        parameters.lanes,
-        Some(parameters.output_len),
-    )
-    .map_err(|_| VaultError::KeyDerivationFailed)?;
-
-    let argon2 = Argon2::new(Algorithm::Argon2id, Version::V0x13, params);
-    let mut key = Zeroizing::new([0_u8; KEY_LEN]);
-    argon2
-        .hash_password_into(passphrase.expose().as_bytes(), salt, key.as_mut())
-        .map_err(|_| VaultError::KeyDerivationFailed)?;
-    Ok(key)
-}
-
-fn decode_array<const N: usize>(encoded: &str) -> Result<[u8; N], VaultError> {
-    let decoded = BASE64
-        .decode(encoded)
-        .map_err(|_| VaultError::InvalidFormat)?;
-    decoded.try_into().map_err(|_| VaultError::InvalidFormat)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::{
-        build_get_balance_request, AuthorizedMessage, AuthorizedTransactionMessage,
-        CanonicalTransactionMessage, Cluster, LedgerError, LockedVault, SecretPassphrase,
-        SecretSeed, SignatureBytes, SignerError, TransactionLedgerEntry, TransactionMessageError,
-        TransactionState, VaultError, CIPHERTEXT_LEN, VAULT_VERSION,
-    };
-    use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
-    use ed25519_dalek::{Signature, Verifier as _, VerifyingKey};
-    use solana_hash::Hash;
-    use solana_instruction::Instruction;
-    use solana_pubkey::Pubkey;
-
-    #[test]
-    fn engine_identity_is_stable() {
-        assert_eq!(super::engine_name(), "scout-wallet-lab");
-    }
-
-    #[test]
-    fn generated_vault_round_trips() -> Result<(), VaultError> {
-        let passphrase = SecretPassphrase::new("correct horse battery staple".to_owned());
-        let vault = LockedVault::generate(&passphrase)?;
-        let expected_public_key = vault.public_key()?;
-        let json = vault.to_json()?;
-        let parsed = LockedVault::from_json(&json)?;
-        let unlocked = parsed.unlock(&passphrase)?;
-
-        assert_eq!(unlocked.public_key(), expected_public_key);
-        Ok(())
-    }
-
-    #[test]
-    fn imported_seed_is_stable() -> Result<(), VaultError> {
-        let passphrase = SecretPassphrase::new("import test".to_owned());
-        let first = LockedVault::import_seed(&passphrase, SecretSeed::new([7_u8; 32]))?;
-        let second = LockedVault::import_seed(&passphrase, SecretSeed::new([7_u8; 32]))?;
-
-        assert_eq!(first.public_key()?, second.public_key()?);
-        Ok(())
-    }
-
-    #[test]
-    fn wrong_passphrase_is_rejected() -> Result<(), VaultError> {
-        let correct = SecretPassphrase::new("correct passphrase".to_owned());
-        let wrong = SecretPassphrase::new("wrong passphrase".to_owned());
-        let vault = LockedVault::generate(&correct)?;
-        let result = vault.unlock(&wrong);
-
-        assert!(matches!(result, Err(VaultError::DecryptionFailed)));
-        Ok(())
-    }
-
-    #[test]
-    fn unsupported_version_is_rejected() -> Result<(), VaultError> {
-        let passphrase = SecretPassphrase::new("version test".to_owned());
-        let vault = LockedVault::generate(&passphrase)?;
-        let mut json = vault.to_json()?;
-        json = json.replacen(
-            &format!("\"version\": {VAULT_VERSION}"),
-            "\"version\": 99",
-            1,
-        );
-
-        let result = LockedVault::from_json(&json);
-        assert!(matches!(result, Err(VaultError::UnsupportedVersion)));
-        Ok(())
-    }
-
-    #[test]
-    fn serialized_vault_has_no_plaintext_passphrase_or_seed() -> Result<(), VaultError> {
-        let passphrase_text = "never serialize this phrase";
-        let passphrase = SecretPassphrase::new(passphrase_text.to_owned());
-        let seed = [203_u8; 32];
-        let seed_b64 = BASE64.encode(seed);
-        let vault = LockedVault::import_seed(&passphrase, SecretSeed::new(seed))?;
-        let json = vault.to_json()?;
-
-        assert!(!json.contains(passphrase_text));
-        assert!(!json.contains(&seed_b64));
-        Ok(())
-    }
-
-    #[test]
-    fn ciphertext_tampering_is_rejected() -> Result<(), VaultError> {
-        let passphrase = SecretPassphrase::new("tamper test".to_owned());
-        let mut vault = LockedVault::generate(&passphrase)?;
-        let mut ciphertext = BASE64
-            .decode(&vault.ciphertext_b64)
-            .map_err(|_| VaultError::InvalidFormat)?;
-
-        let first_byte = ciphertext.first_mut().ok_or(VaultError::InvalidFormat)?;
-        *first_byte ^= 1;
-        vault.ciphertext_b64 = BASE64.encode(ciphertext);
-
-        let result = vault.unlock(&passphrase);
-        assert!(matches!(result, Err(VaultError::DecryptionFailed)));
-        Ok(())
-    }
-
-    #[test]
-    fn malformed_ciphertext_length_is_rejected() -> Result<(), VaultError> {
-        let passphrase = SecretPassphrase::new("length test".to_owned());
-        let vault = LockedVault::generate(&passphrase)?;
-        let json = vault.to_json()?;
-        let encoded = BASE64.encode(vec![0_u8; CIPHERTEXT_LEN - 1]);
-
-        let marker = "\"ciphertext_b64\": \"";
-        let start = json.find(marker).ok_or(VaultError::SerializationFailed)? + marker.len();
-        let tail = &json[start..];
-        let end = tail.find('"').ok_or(VaultError::SerializationFailed)? + start;
-
-        let mut malformed = String::with_capacity(json.len());
-        malformed.push_str(&json[..start]);
-        malformed.push_str(&encoded);
-        malformed.push_str(&json[end..]);
-
-        let result = LockedVault::from_json(&malformed);
-        assert!(matches!(result, Err(VaultError::InvalidFormat)));
-        Ok(())
-    }
-
-    #[test]
-    fn empty_authorized_message_is_rejected() {
-        let result = AuthorizedMessage::new(&[]);
-        assert!(matches!(result, Err(SignerError::EmptyMessage)));
-    }
-
-    #[test]
-    fn authorized_message_signature_verifies() -> Result<(), VaultError> {
-        let passphrase = SecretPassphrase::new("signing test".to_owned());
-        let vault = LockedVault::import_seed(&passphrase, SecretSeed::new([19_u8; 32]))?;
-        let unlocked = vault.unlock(&passphrase)?;
-        let public_key = unlocked.public_key();
-        let message_bytes = b"scout authorized execution message";
-        let message =
-            AuthorizedMessage::new(message_bytes).map_err(|_| VaultError::SerializationFailed)?;
-        let signature = unlocked
-            .sign_authorized(&message)
-            .map_err(|_| VaultError::SerializationFailed)?;
-
-        let verifying_key =
-            VerifyingKey::from_bytes(&public_key).map_err(|_| VaultError::InvalidFormat)?;
-        let signature = Signature::from_bytes(&signature.to_bytes());
-
-        assert!(verifying_key.verify(message_bytes, &signature).is_ok());
-        Ok(())
-    }
-
-    #[test]
-    fn locked_vault_exposes_canonical_devnet_account() -> Result<(), VaultError> {
-        let passphrase = SecretPassphrase::new("account test".to_owned());
-        let vault = LockedVault::import_seed(&passphrase, SecretSeed::new([31_u8; 32]))?;
-        let expected = Pubkey::new_from_array(vault.public_key()?);
-        let account = vault.devnet_account()?;
-
-        assert_eq!(account.address(), expected);
-        assert_eq!(account.cluster(), Cluster::Devnet);
-        assert_eq!(account.cluster().rpc_name(), "devnet");
-        assert_eq!(account.cluster().rpc_url(), "https://api.devnet.solana.com");
-        assert_eq!(account.lamports(), None);
-        Ok(())
-    }
-
-    #[test]
-    fn unlocked_wallet_exposes_same_devnet_account() -> Result<(), VaultError> {
-        let passphrase = SecretPassphrase::new("unlocked account test".to_owned());
-        let vault = LockedVault::import_seed(&passphrase, SecretSeed::new([41_u8; 32]))?;
-        let locked_account = vault.devnet_account()?;
-        let unlocked = vault.unlock(&passphrase)?;
-        let unlocked_account = unlocked.devnet_account();
-
-        assert_eq!(locked_account.address(), unlocked_account.address());
-        Ok(())
-    }
-
-    #[test]
-    fn devnet_balance_state_is_explicit() -> Result<(), VaultError> {
-        let passphrase = SecretPassphrase::new("balance state test".to_owned());
-        let vault = LockedVault::import_seed(&passphrase, SecretSeed::new([53_u8; 32]))?;
-        let mut account = vault.devnet_account()?;
-
-        assert_eq!(account.lamports(), None);
-
-        account.record_balance(1_500_000_000);
-        assert_eq!(account.lamports(), Some(1_500_000_000));
-
-        account.clear_balance();
-        assert_eq!(account.lamports(), None);
-        Ok(())
-    }
-
-    #[test]
-    fn devnet_rpc_request_is_read_only_and_fixed() -> Result<(), VaultError> {
-        let passphrase = SecretPassphrase::new("rpc request test".to_owned());
-        let vault = LockedVault::import_seed(&passphrase, SecretSeed::new([61_u8; 32]))?;
-        let account = vault.devnet_account()?;
-        let request = build_get_balance_request(account.address());
-        let encoded = serde_json::to_value(request).map_err(|_| VaultError::SerializationFailed)?;
-
-        assert_eq!(encoded["jsonrpc"], "2.0");
-        assert_eq!(encoded["id"], 1);
-        assert_eq!(encoded["method"], "getBalance");
-        assert_eq!(encoded["params"][0], account.address().to_string());
-        assert_eq!(encoded["params"][1]["commitment"], "confirmed");
-        Ok(())
-    }
-
-    #[test]
-    fn empty_transaction_message_is_rejected() {
-        let payer = Pubkey::new_from_array([71_u8; 32]);
-        let blockhash = Hash::new_from_array([73_u8; 32]);
-        let result = CanonicalTransactionMessage::new(&[], payer, blockhash);
-
-        assert!(matches!(
-            result,
-            Err(TransactionMessageError::EmptyInstructions)
-        ));
-    }
-
-    #[test]
-    fn canonical_transaction_message_is_deterministic() -> Result<(), TransactionMessageError> {
-        let payer = Pubkey::new_from_array([79_u8; 32]);
-        let program_id = Pubkey::new_from_array([83_u8; 32]);
-        let blockhash = Hash::new_from_array([89_u8; 32]);
-        let instruction = Instruction {
-            program_id,
-            accounts: Vec::new(),
-            data: vec![1_u8, 2_u8, 3_u8, 4_u8],
-        };
-
-        let first = CanonicalTransactionMessage::new(&[instruction.clone()], payer, blockhash)?;
-        let second = CanonicalTransactionMessage::new(&[instruction], payer, blockhash)?;
-
-        assert_eq!(first.bytes(), second.bytes());
-        assert!(!first.bytes().is_empty());
-        Ok(())
-    }
-
-    #[test]
-    fn canonical_transaction_message_signature_verifies() -> Result<(), VaultError> {
-        let passphrase = SecretPassphrase::new("transaction signing test".to_owned());
-        let vault = LockedVault::import_seed(&passphrase, SecretSeed::new([97_u8; 32]))?;
-        let unlocked = vault.unlock(&passphrase)?;
-        let payer = Pubkey::new_from_array(unlocked.public_key());
-        let program_id = Pubkey::new_from_array([101_u8; 32]);
-        let blockhash = Hash::new_from_array([103_u8; 32]);
-        let instruction = Instruction {
-            program_id,
-            accounts: Vec::new(),
-            data: vec![9_u8, 8_u8, 7_u8],
-        };
-        let canonical = CanonicalTransactionMessage::new(&[instruction], payer, blockhash)
-            .map_err(|_| VaultError::SerializationFailed)?;
-        let authorized = AuthorizedTransactionMessage::new(&canonical);
-        let signature = unlocked.sign_transaction_message(&authorized);
-
-        let verifying_key = VerifyingKey::from_bytes(&unlocked.public_key())
-            .map_err(|_| VaultError::InvalidFormat)?;
-        let signature = Signature::from_bytes(&signature.to_bytes());
-
-        assert!(verifying_key.verify(canonical.bytes(), &signature).is_ok());
-        Ok(())
-    }
-
-    #[test]
-    fn zero_transaction_reservation_is_rejected() {
-        let blockhash = Hash::new_from_array([107_u8; 32]);
-        let result = TransactionLedgerEntry::reserve(0, blockhash, 500);
-
-        assert!(matches!(result, Err(LedgerError::ZeroReservation)));
-    }
-
-    #[test]
-    fn ambiguous_submission_holds_capital_until_expiry() -> Result<(), LedgerError> {
-        let blockhash = Hash::new_from_array([109_u8; 32]);
-        let mut entry = TransactionLedgerEntry::reserve(900_000_000, blockhash, 500)?;
-        let signature = SignatureBytes {
-            value: [113_u8; 64],
-        };
-
-        entry.mark_signed(signature)?;
-        entry.mark_submitted()?;
-        entry.mark_ambiguous()?;
-
-        assert_eq!(entry.state(), TransactionState::Ambiguous);
-        assert!(entry.capital_is_reserved());
-        assert!(entry.can_retry_delivery(500));
-        assert!(!entry.can_rebuild_economic_intent());
-
-        let early_release = entry.release_if_expired(500);
-        assert!(matches!(
-            early_release,
-            Err(LedgerError::BlockhashStillValid)
-        ));
-
-        entry.release_if_expired(501)?;
-
-        assert_eq!(entry.state(), TransactionState::Released);
-        assert!(!entry.capital_is_reserved());
-        assert!(entry.can_rebuild_economic_intent());
-        Ok(())
-    }
-
-    #[test]
-    fn confirmed_submission_must_settle_before_capital_releases() -> Result<(), LedgerError> {
-        let blockhash = Hash::new_from_array([127_u8; 32]);
-        let mut entry = TransactionLedgerEntry::reserve(700_000_000, blockhash, 900)?;
-        let signature = SignatureBytes {
-            value: [131_u8; 64],
-        };
-
-        entry.mark_signed(signature)?;
-        entry.mark_submitted()?;
-        entry.mark_confirmed()?;
-
-        assert_eq!(entry.state(), TransactionState::Confirmed);
-        assert!(entry.capital_is_reserved());
-        assert!(!entry.can_rebuild_economic_intent());
-
-        entry.settle()?;
-
-        assert_eq!(entry.state(), TransactionState::Settled);
-        assert!(!entry.capital_is_reserved());
-        assert!(!entry.can_rebuild_economic_intent());
-        Ok(())
-    }
-
-    #[test]
-    fn terminal_failure_requires_explicit_release() -> Result<(), LedgerError> {
-        let blockhash = Hash::new_from_array([137_u8; 32]);
-        let mut entry = TransactionLedgerEntry::reserve(400_000_000, blockhash, 1_200)?;
-        let signature = SignatureBytes {
-            value: [139_u8; 64],
-        };
-
-        entry.mark_signed(signature)?;
-        entry.mark_submitted()?;
-        entry.mark_failed()?;
-
-        assert_eq!(entry.state(), TransactionState::Failed);
-        assert!(entry.capital_is_reserved());
-        assert!(!entry.can_rebuild_economic_intent());
-
-        entry.release_terminal_failure()?;
-
-        assert_eq!(entry.state(), TransactionState::Released);
-        assert!(!entry.capital_is_reserved());
-        assert!(entry.can_rebuild_economic_intent());
-        Ok(())
-    }
-
-    #[test]
-    fn invalid_lifecycle_transition_is_rejected() -> Result<(), LedgerError> {
-        let blockhash = Hash::new_from_array([149_u8; 32]);
-        let mut entry = TransactionLedgerEntry::reserve(200_000_000, blockhash, 1_500)?;
-        let result = entry.mark_submitted();
-
-        assert!(matches!(result, Err(LedgerError::InvalidTransition)));
-        assert_eq!(entry.state(), TransactionState::Reserved);
-        Ok(())
-    }
-}
+        let kdf = KdfPa
