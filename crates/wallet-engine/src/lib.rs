@@ -840,8 +840,8 @@ mod tests {
     use super::{
         build_get_balance_request, AuthorizedMessage, AuthorizedTransactionMessage,
         CanonicalTransactionMessage, Cluster, LedgerError, LockedVault, SecretPassphrase,
-        SecretSeed, SignatureBytes, SignerError, TransactionLedgerEntry,
-        TransactionMessageError, TransactionState, VaultError, CIPHERTEXT_LEN, VAULT_VERSION,
+        SecretSeed, SignatureBytes, SignerError, TransactionLedgerEntry, TransactionMessageError,
+        TransactionState, VaultError, CIPHERTEXT_LEN, VAULT_VERSION,
     };
     use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
     use ed25519_dalek::{Signature, Verifier as _, VerifyingKey};
