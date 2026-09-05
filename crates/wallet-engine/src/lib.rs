@@ -190,10 +190,7 @@ impl LockedVault {
         Ok(vault)
     }
 
-    fn seal_seed(
-        passphrase: &SecretPassphrase,
-        seed: &[u8; SEED_LEN],
-    ) -> Result<Self, VaultError> {
+    fn seal_seed(passphrase: &SecretPassphrase, seed: &[u8; SEED_LEN]) -> Result<Self, VaultError> {
         let signing_key = SigningKey::from_bytes(seed);
         let public_key = signing_key.verifying_key().to_bytes();
 
@@ -210,7 +207,10 @@ impl LockedVault {
         let ciphertext = cipher
             .encrypt(
                 XNonce::from_slice(&nonce),
-                Payload { msg: seed, aad: AAD },
+                Payload {
+                    msg: seed,
+                    aad: AAD,
+                },
             )
             .map_err(|_| VaultError::EncryptionFailed)?;
 
@@ -371,6 +371,25 @@ mod tests {
     }
 
     #[test]
+    fn ciphertext_tampering_is_rejected() -> Result<(), VaultError> {
+        let passphrase = SecretPassphrase::new("tamper test".to_owned());
+        let mut vault = LockedVault::generate(&passphrase)?;
+        let mut ciphertext = BASE64
+            .decode(&vault.ciphertext_b64)
+            .map_err(|_| VaultError::InvalidFormat)?;
+
+        let first_byte = ciphertext
+            .first_mut()
+            .ok_or(VaultError::InvalidFormat)?;
+        *first_byte ^= 1;
+        vault.ciphertext_b64 = BASE64.encode(ciphertext);
+
+        let result = vault.unlock(&passphrase);
+        assert!(matches!(result, Err(VaultError::DecryptionFailed)));
+        Ok(())
+    }
+
+    #[test]
     fn malformed_ciphertext_length_is_rejected() -> Result<(), VaultError> {
         let passphrase = SecretPassphrase::new("length test".to_owned());
         let vault = LockedVault::generate(&passphrase)?;
@@ -378,15 +397,9 @@ mod tests {
         let encoded = BASE64.encode(vec![0_u8; CIPHERTEXT_LEN - 1]);
 
         let marker = "\"ciphertext_b64\": \"";
-        let start = json
-            .find(marker)
-            .ok_or(VaultError::SerializationFailed)?
-            + marker.len();
+        let start = json.find(marker).ok_or(VaultError::SerializationFailed)? + marker.len();
         let tail = &json[start..];
-        let end = tail
-            .find('"')
-            .ok_or(VaultError::SerializationFailed)?
-            + start;
+        let end = tail.find('"').ok_or(VaultError::SerializationFailed)? + start;
 
         let mut malformed = String::with_capacity(json.len());
         malformed.push_str(&json[..start]);
