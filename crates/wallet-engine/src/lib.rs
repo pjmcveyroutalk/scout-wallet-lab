@@ -1818,7 +1818,7 @@ mod tests {
             .map_err(|_| VaultError::SerializationFailed)?;
 
         assert_eq!(prepared.ledger().state(), TransactionState::Signed);
-        assert_eq!(prepared.ledger().signature(), Some(signature));
+        assert!(prepared.ledger().signature() == Some(signature));
         Ok(())
     }
 
