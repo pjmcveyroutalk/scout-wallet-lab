@@ -9,6 +9,9 @@ use chacha20poly1305::{
 use ed25519_dalek::{Signer as _, SigningKey};
 use rustls::crypto::CryptoProvider;
 use serde::{Deserialize, Serialize};
+use solana_hash::Hash;
+use solana_instruction::Instruction;
+use solana_message::Message;
 use solana_pubkey::Pubkey;
 use std::{fmt, time::Duration};
 use zeroize::{Zeroize, Zeroizing};
@@ -228,6 +231,69 @@ fn build_get_balance_request(address: Pubkey) -> GetBalanceRequest {
                 commitment: "confirmed",
             },
         ),
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TransactionMessageError {
+    EmptyInstructions,
+    SerializationFailed,
+}
+
+impl fmt::Display for TransactionMessageError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let message = match self {
+            Self::EmptyInstructions => "transaction message must contain at least one instruction",
+            Self::SerializationFailed => "transaction message serialization failed",
+        };
+        formatter.write_str(message)
+    }
+}
+
+impl std::error::Error for TransactionMessageError {}
+
+pub struct CanonicalTransactionMessage {
+    bytes: Vec<u8>,
+}
+
+impl CanonicalTransactionMessage {
+    pub fn new(
+        instructions: &[Instruction],
+        payer: Pubkey,
+        recent_blockhash: Hash,
+    ) -> Result<Self, TransactionMessageError> {
+        if instructions.is_empty() {
+            return Err(TransactionMessageError::EmptyInstructions);
+        }
+
+        let message =
+            Message::new_with_blockhash(instructions, Some(&payer), &recent_blockhash);
+        let bytes =
+            bincode::serialize(&message).map_err(|_| TransactionMessageError::SerializationFailed)?;
+
+        Ok(Self { bytes })
+    }
+
+    #[must_use]
+    pub fn bytes(&self) -> &[u8] {
+        self.bytes.as_slice()
+    }
+}
+
+pub struct AuthorizedTransactionMessage<'a> {
+    bytes: &'a [u8],
+}
+
+impl<'a> AuthorizedTransactionMessage<'a> {
+    #[cfg(test)]
+    fn new(message: &'a CanonicalTransactionMessage) -> Self {
+        Self {
+            bytes: message.bytes(),
+        }
+    }
+
+    fn as_bytes(&self) -> &[u8] {
+        self.bytes
     }
 }
 
@@ -521,6 +587,18 @@ impl UnlockedWallet {
             value: signature.to_bytes(),
         })
     }
+
+    #[must_use]
+    pub fn sign_transaction_message(
+        &self,
+        message: &AuthorizedTransactionMessage<'_>,
+    ) -> SignatureBytes {
+        let signature = self.signing_key.sign(message.as_bytes());
+
+        SignatureBytes {
+            value: signature.to_bytes(),
+        }
+    }
 }
 
 impl KdfParameters {
@@ -566,11 +644,14 @@ fn decode_array<const N: usize>(encoded: &str) -> Result<[u8; N], VaultError> {
 #[cfg(test)]
 mod tests {
     use super::{
-        build_get_balance_request, AuthorizedMessage, Cluster, LockedVault, SecretPassphrase,
-        SecretSeed, SignerError, VaultError, CIPHERTEXT_LEN, VAULT_VERSION,
+        build_get_balance_request, AuthorizedMessage, AuthorizedTransactionMessage,
+        CanonicalTransactionMessage, Cluster, LockedVault, SecretPassphrase, SecretSeed,
+        SignerError, TransactionMessageError, VaultError, CIPHERTEXT_LEN, VAULT_VERSION,
     };
     use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
     use ed25519_dalek::{Signature, Verifier as _, VerifyingKey};
+    use solana_hash::Hash;
+    use solana_instruction::Instruction;
     use solana_pubkey::Pubkey;
 
     #[test]
@@ -764,6 +845,65 @@ mod tests {
         assert_eq!(encoded["method"], "getBalance");
         assert_eq!(encoded["params"][0], account.address().to_string());
         assert_eq!(encoded["params"][1]["commitment"], "confirmed");
+        Ok(())
+    }
+
+    #[test]
+    fn empty_transaction_message_is_rejected() {
+        let payer = Pubkey::new_from_array([71_u8; 32]);
+        let blockhash = Hash::new_from_array([73_u8; 32]);
+        let result = CanonicalTransactionMessage::new(&[], payer, blockhash);
+
+        assert!(matches!(
+            result,
+            Err(TransactionMessageError::EmptyInstructions)
+        ));
+    }
+
+    #[test]
+    fn canonical_transaction_message_is_deterministic() -> Result<(), TransactionMessageError> {
+        let payer = Pubkey::new_from_array([79_u8; 32]);
+        let program_id = Pubkey::new_from_array([83_u8; 32]);
+        let blockhash = Hash::new_from_array([89_u8; 32]);
+        let instruction = Instruction {
+            program_id,
+            accounts: Vec::new(),
+            data: vec![1_u8, 2_u8, 3_u8, 4_u8],
+        };
+
+        let first =
+            CanonicalTransactionMessage::new(&[instruction.clone()], payer, blockhash)?;
+        let second = CanonicalTransactionMessage::new(&[instruction], payer, blockhash)?;
+
+        assert_eq!(first.bytes(), second.bytes());
+        assert!(!first.bytes().is_empty());
+        Ok(())
+    }
+
+    #[test]
+    fn canonical_transaction_message_signature_verifies() -> Result<(), VaultError> {
+        let passphrase = SecretPassphrase::new("transaction signing test".to_owned());
+        let vault = LockedVault::import_seed(&passphrase, SecretSeed::new([97_u8; 32]))?;
+        let unlocked = vault.unlock(&passphrase)?;
+        let payer = Pubkey::new_from_array(unlocked.public_key());
+        let program_id = Pubkey::new_from_array([101_u8; 32]);
+        let blockhash = Hash::new_from_array([103_u8; 32]);
+        let instruction = Instruction {
+            program_id,
+            accounts: Vec::new(),
+            data: vec![9_u8, 8_u8, 7_u8],
+        };
+        let canonical =
+            CanonicalTransactionMessage::new(&[instruction], payer, blockhash)
+                .map_err(|_| VaultError::SerializationFailed)?;
+        let authorized = AuthorizedTransactionMessage::new(&canonical);
+        let signature = unlocked.sign_transaction_message(&authorized);
+
+        let verifying_key =
+            VerifyingKey::from_bytes(&unlocked.public_key()).map_err(|_| VaultError::InvalidFormat)?;
+        let signature = Signature::from_bytes(&signature.to_bytes());
+
+        assert!(verifying_key.verify(canonical.bytes(), &signature).is_ok());
         Ok(())
     }
 }
