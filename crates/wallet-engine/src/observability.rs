@@ -1,5 +1,6 @@
 use crate::{DevnetAccount, SignerState, TransactionLedgerEntry, TransactionState, UnlockedWallet};
 use serde::Serialize;
+use solana_pubkey::Pubkey;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct WalletObservabilitySnapshot {
@@ -18,11 +19,18 @@ impl WalletObservabilitySnapshot {
         account: &DevnetAccount,
         transaction: Option<&TransactionLedgerEntry>,
     ) -> Self {
+        let wallet_address = Pubkey::new_from_array(wallet.public_key());
+        let account_matches_wallet = account.address().to_bytes() == wallet.public_key();
+
         Self {
             engine: crate::engine_name(),
             cluster: account.cluster().rpc_name(),
-            address: account.address().to_string(),
-            lamports: account.lamports(),
+            address: wallet_address.to_string(),
+            lamports: if account_matches_wallet {
+                account.lamports()
+            } else {
+                None
+            },
             signer: SignerObservation::from_state(wallet.signer_state()),
             transaction: transaction.map(TransactionObservation::capture),
         }
@@ -280,6 +288,33 @@ mod tests {
 
         assert_eq!(snapshot.cluster(), Cluster::Devnet.rpc_name());
         assert_eq!(snapshot.cluster(), "devnet");
+
+        Ok(())
+    }
+
+    #[test]
+    fn unrelated_account_cannot_control_snapshot_identity_or_balance() -> Result<(), VaultError> {
+        let wallet_passphrase = SecretPassphrase::new("observability wallet identity".to_owned());
+        let unrelated_passphrase =
+            SecretPassphrase::new("observability unrelated identity".to_owned());
+
+        let wallet_vault =
+            LockedVault::import_seed(&wallet_passphrase, SecretSeed::new([176_u8; 32]))?;
+        let unrelated_vault =
+            LockedVault::import_seed(&unrelated_passphrase, SecretSeed::new([177_u8; 32]))?;
+
+        let wallet = wallet_vault.unlock(&wallet_passphrase)?;
+        let mut unrelated_account = unrelated_vault.devnet_account()?;
+
+        unrelated_account.record_balance(9_999_999_999);
+
+        let snapshot = WalletObservabilitySnapshot::capture(&wallet, &unrelated_account, None);
+
+        let expected_wallet_address = Pubkey::new_from_array(wallet.public_key()).to_string();
+
+        assert_eq!(snapshot.address(), expected_wallet_address);
+        assert_ne!(snapshot.address(), unrelated_account.address().to_string());
+        assert_eq!(snapshot.lamports(), None);
 
         Ok(())
     }
