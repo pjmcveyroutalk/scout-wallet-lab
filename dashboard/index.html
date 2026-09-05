@@ -746,8 +746,35 @@
       return Number.isSafeInteger(value) && value >= 0;
     }
 
+    function hasExactKeys(value, expectedKeys) {
+      if (
+        !value ||
+        typeof value !== "object" ||
+        Array.isArray(value)
+      ) {
+        return false;
+      }
+
+      const keys = Object.keys(value);
+
+      return (
+        keys.length === expectedKeys.length &&
+        expectedKeys.every((key) =>
+          Object.prototype.hasOwnProperty.call(value, key)
+        )
+      );
+    }
+
     function validateSigner(value) {
-      if (!value || typeof value !== "object") {
+      if (
+        !hasExactKeys(
+          value,
+          [
+            "state",
+            "signing_locked"
+          ]
+        )
+      ) {
         return false;
       }
 
@@ -770,7 +797,20 @@
         return true;
       }
 
-      if (!value || typeof value !== "object") {
+      if (
+        !hasExactKeys(
+          value,
+          [
+            "state",
+            "reserved_lamports",
+            "last_valid_block_height",
+            "signature_present",
+            "capital_reserved",
+            "retry_delivery_allowed_at_last_valid_height",
+            "rebuild_economic_intent_allowed"
+          ]
+        )
+      ) {
         return false;
       }
 
@@ -798,7 +838,19 @@
     }
 
     function validateSnapshot(snapshot) {
-      if (!snapshot || typeof snapshot !== "object") {
+      if (
+        !hasExactKeys(
+          snapshot,
+          [
+            "engine",
+            "cluster",
+            "address",
+            "lamports",
+            "signer",
+            "transaction"
+          ]
+        )
+      ) {
         return false;
       }
 
