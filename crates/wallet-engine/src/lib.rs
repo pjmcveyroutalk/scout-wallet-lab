@@ -620,14 +620,22 @@ impl fmt::Display for VaultError {
 impl std::error::Error for VaultError {}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SignerState {
+    Running,
+    Locked,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SignerError {
     EmptyMessage,
+    Locked,
 }
 
 impl fmt::Display for SignerError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::EmptyMessage => formatter.write_str("signing message must not be empty"),
+            Self::Locked => formatter.write_str("signer is emergency locked"),
         }
     }
 }
@@ -655,6 +663,7 @@ struct KdfParameters {
 
 pub struct UnlockedWallet {
     signing_key: SigningKey,
+    signer_state: SignerState,
 }
 
 pub struct AuthorizedMessage<'a> {
@@ -963,7 +972,10 @@ impl LockedVault {
             return Err(VaultError::PublicKeyMismatch);
         }
 
-        Ok(UnlockedWallet { signing_key })
+        Ok(UnlockedWallet {
+            signing_key,
+            signer_state: SignerState::Running,
+        })
     }
 
     pub fn public_key(&self) -> Result<[u8; 32], VaultError> {
@@ -1055,10 +1067,25 @@ impl UnlockedWallet {
         DevnetAccount::new(Pubkey::new_from_array(self.public_key()))
     }
 
+    #[must_use]
+    pub const fn signer_state(&self) -> SignerState {
+        self.signer_state
+    }
+
+    #[must_use]
+    pub const fn signing_is_locked(&self) -> bool {
+        matches!(self.signer_state, SignerState::Locked)
+    }
+
+    pub fn emergency_lock(&mut self) {
+        self.signer_state = SignerState::Locked;
+    }
+
     pub fn sign_authorized(
         &self,
         message: &AuthorizedMessage<'_>,
     ) -> Result<SignatureBytes, SignerError> {
+        self.ensure_signing_enabled()?;
         let signature = self.signing_key.sign(message.as_bytes());
 
         Ok(SignatureBytes {
@@ -1066,16 +1093,24 @@ impl UnlockedWallet {
         })
     }
 
-    #[must_use]
     pub fn sign_transaction_message(
         &self,
         message: &AuthorizedTransactionMessage<'_>,
-    ) -> SignatureBytes {
+    ) -> Result<SignatureBytes, SignerError> {
+        self.ensure_signing_enabled()?;
         let signature = self.signing_key.sign(message.as_bytes());
 
-        SignatureBytes {
+        Ok(SignatureBytes {
             value: signature.to_bytes(),
+        })
+    }
+
+    fn ensure_signing_enabled(&self) -> Result<(), SignerError> {
+        if self.signing_is_locked() {
+            return Err(SignerError::Locked);
         }
+
+        Ok(())
     }
 }
 
@@ -1128,8 +1163,8 @@ mod tests {
         BlockhashLease, CanonicalTransactionMessage, Cluster, GetBlockHeightResponse,
         GetLatestBlockhashResponse, LedgerError, LockedVault, PreparedTransaction,
         PreparedTransactionError, RpcError, SecretPassphrase, SecretSeed, SignatureBytes,
-        SignerError, TransactionLedgerEntry, TransactionMessageError, TransactionState, VaultError,
-        CIPHERTEXT_LEN, VAULT_VERSION,
+        SignerError, SignerState, TransactionLedgerEntry, TransactionMessageError,
+        TransactionState, VaultError, CIPHERTEXT_LEN, VAULT_VERSION,
     };
     use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
     use ed25519_dalek::{Signature, Verifier as _, VerifyingKey};
@@ -1161,6 +1196,7 @@ mod tests {
         let unlocked = parsed.unlock(&passphrase)?;
 
         assert_eq!(unlocked.public_key(), expected_public_key);
+        assert_eq!(unlocked.signer_state(), SignerState::Running);
         Ok(())
     }
 
@@ -1278,6 +1314,25 @@ mod tests {
         let signature = Signature::from_bytes(&signature.to_bytes());
 
         assert!(verifying_key.verify(message_bytes, &signature).is_ok());
+        Ok(())
+    }
+
+    #[test]
+    fn emergency_lock_blocks_authorized_message_signing() -> Result<(), VaultError> {
+        let passphrase = SecretPassphrase::new("emergency lock message test".to_owned());
+        let vault = LockedVault::import_seed(&passphrase, SecretSeed::new([23_u8; 32]))?;
+        let mut unlocked = vault.unlock(&passphrase)?;
+        let message = AuthorizedMessage::new(b"authorized before lock")
+            .map_err(|_| VaultError::SerializationFailed)?;
+
+        unlocked.emergency_lock();
+
+        assert_eq!(unlocked.signer_state(), SignerState::Locked);
+        assert!(unlocked.signing_is_locked());
+        assert!(matches!(
+            unlocked.sign_authorized(&message),
+            Err(SignerError::Locked)
+        ));
         Ok(())
     }
 
@@ -1452,13 +1507,54 @@ mod tests {
         let canonical = CanonicalTransactionMessage::new(&[instruction], payer, blockhash)
             .map_err(|_| VaultError::SerializationFailed)?;
         let authorized = AuthorizedTransactionMessage::new(&canonical);
-        let signature = unlocked.sign_transaction_message(&authorized);
+        let signature = unlocked
+            .sign_transaction_message(&authorized)
+            .map_err(|_| VaultError::SerializationFailed)?;
 
         let verifying_key = VerifyingKey::from_bytes(&unlocked.public_key())
             .map_err(|_| VaultError::InvalidFormat)?;
         let signature = Signature::from_bytes(&signature.to_bytes());
 
         assert!(verifying_key.verify(canonical.bytes(), &signature).is_ok());
+        Ok(())
+    }
+
+    #[test]
+    fn emergency_lock_blocks_transaction_signing() -> Result<(), VaultError> {
+        let passphrase = SecretPassphrase::new("emergency transaction lock test".to_owned());
+        let vault = LockedVault::import_seed(&passphrase, SecretSeed::new([99_u8; 32]))?;
+        let mut unlocked = vault.unlock(&passphrase)?;
+        let payer = Pubkey::new_from_array(unlocked.public_key());
+        let instruction = Instruction {
+            program_id: Pubkey::new_from_array([100_u8; 32]),
+            accounts: Vec::new(),
+            data: vec![1_u8],
+        };
+        let canonical =
+            CanonicalTransactionMessage::new(&[instruction], payer, Hash::new_from_array([102; 32]))
+                .map_err(|_| VaultError::SerializationFailed)?;
+        let authorized = AuthorizedTransactionMessage::new(&canonical);
+
+        unlocked.emergency_lock();
+
+        assert!(matches!(
+            unlocked.sign_transaction_message(&authorized),
+            Err(SignerError::Locked)
+        ));
+        Ok(())
+    }
+
+    #[test]
+    fn emergency_lock_is_irreversible_for_unlocked_wallet() -> Result<(), VaultError> {
+        let passphrase = SecretPassphrase::new("irreversible lock test".to_owned());
+        let vault = LockedVault::import_seed(&passphrase, SecretSeed::new([103_u8; 32]))?;
+        let mut unlocked = vault.unlock(&passphrase)?;
+
+        unlocked.emergency_lock();
+        unlocked.emergency_lock();
+
+        assert_eq!(unlocked.signer_state(), SignerState::Locked);
+        assert!(unlocked.signing_is_locked());
         Ok(())
     }
 
