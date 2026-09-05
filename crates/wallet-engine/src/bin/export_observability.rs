@@ -248,12 +248,10 @@ mod tests {
     }
 
     #[test]
-    fn observability_identity_rejects_unrelated_account(
-    ) -> Result<(), Box<dyn std::error::Error>> {
-        let first_passphrase =
-            SecretPassphrase::new("observability identity first".to_owned());
-        let second_passphrase =
-            SecretPassphrase::new("observability identity second".to_owned());
+    fn observability_identity_rejects_unrelated_account() -> Result<(), Box<dyn std::error::Error>>
+    {
+        let first_passphrase = SecretPassphrase::new("observability identity first".to_owned());
+        let second_passphrase = SecretPassphrase::new("observability identity second".to_owned());
 
         let first_vault =
             LockedVault::import_seed(&first_passphrase, SecretSeed::new([222_u8; 32]))?;
@@ -269,8 +267,7 @@ mod tests {
     }
 
     #[test]
-    fn balance_request_uses_verified_account_identity(
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    fn balance_request_uses_verified_account_identity() -> Result<(), Box<dyn std::error::Error>> {
         let passphrase = SecretPassphrase::new("observability balance request".to_owned());
         let vault = LockedVault::import_seed(&passphrase, SecretSeed::new([224_u8; 32]))?;
         let wallet = vault.unlock(&passphrase)?;
