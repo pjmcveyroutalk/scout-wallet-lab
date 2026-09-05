@@ -137,7 +137,7 @@ pub struct AuthorizedMessage<'a> {
 }
 
 impl<'a> AuthorizedMessage<'a> {
-    pub fn new(bytes: &'a [u8]) -> Result<Self, SignerError> {
+    pub(crate) fn new(bytes: &'a [u8]) -> Result<Self, SignerError> {
         if bytes.is_empty() {
             return Err(SignerError::EmptyMessage);
         }
