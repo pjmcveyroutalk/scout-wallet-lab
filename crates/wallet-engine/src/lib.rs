@@ -757,8 +757,7 @@ mod tests {
         let vault = LockedVault::import_seed(&passphrase, SecretSeed::new([61_u8; 32]))?;
         let account = vault.devnet_account()?;
         let request = build_get_balance_request(account.address());
-        let encoded =
-            serde_json::to_value(request).map_err(|_| VaultError::SerializationFailed)?;
+        let encoded = serde_json::to_value(request).map_err(|_| VaultError::SerializationFailed)?;
 
         assert_eq!(encoded["jsonrpc"], "2.0");
         assert_eq!(encoded["id"], 1);
