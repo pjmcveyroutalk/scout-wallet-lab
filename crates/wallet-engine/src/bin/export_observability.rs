@@ -13,11 +13,11 @@ const PASSPHRASE_ENV: &str = "SCOUT_WALLET_PASSPHRASE";
 const SNAPSHOT_PATH: &str = "dashboard/wallet-observability.json";
 
 fn main() -> Result<(), Box<dyn Error>> {
-    let vault_path = env::var_os(VAULT_PATH_ENV)
-        .ok_or_else(|| format!("{VAULT_PATH_ENV} is required"))?;
+    let vault_path =
+        env::var_os(VAULT_PATH_ENV).ok_or_else(|| format!("{VAULT_PATH_ENV} is required"))?;
 
-    let passphrase_value = env::var(PASSPHRASE_ENV)
-        .map_err(|_| format!("{PASSPHRASE_ENV} is required"))?;
+    let passphrase_value =
+        env::var(PASSPHRASE_ENV).map_err(|_| format!("{PASSPHRASE_ENV} is required"))?;
 
     env::remove_var(PASSPHRASE_ENV);
 
