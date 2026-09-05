@@ -2,7 +2,7 @@ const crypto = require("node:crypto");
 
 const VERIFY_TIMEOUT_MS = 8_000;
 const EXPECTED_OWNER_ID = "team_jC9jlJ9GZ9GSjrbYoD0pin3U";
-const EXPECTED_SOURCE_PROJECT = "scout-wallet-lab";
+const EXPECTED_SOURCE_PROJECT = "routalk-pilot";
 const EXPECTED_SOURCE_ENVIRONMENT = "production";
 const OIDC_ISSUER = "https://oidc.vercel.com/routalk-builder";
 const OIDC_AUDIENCE = "https://vercel.com/routalk-builder";
