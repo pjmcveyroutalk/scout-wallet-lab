@@ -1263,8 +1263,8 @@ mod tests {
         BlockhashLease, CanonicalTransactionMessage, Cluster, ExecutionPolicy,
         GetBlockHeightResponse, GetLatestBlockhashResponse, LedgerError, LockedVault, PolicyError,
         PreparedTransaction, PreparedTransactionError, RpcError, SecretPassphrase, SecretSeed,
-        SignatureBytes, SignerError, SignerState, TransactionLedgerEntry,
-        TransactionMessageError, TransactionState, VaultError, CIPHERTEXT_LEN, VAULT_VERSION,
+        SignatureBytes, SignerError, SignerState, TransactionLedgerEntry, TransactionMessageError,
+        TransactionState, VaultError, CIPHERTEXT_LEN, VAULT_VERSION,
     };
     use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
     use ed25519_dalek::{Signature, Verifier as _, VerifyingKey};
