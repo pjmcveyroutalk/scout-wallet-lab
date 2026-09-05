@@ -1,6 +1,4 @@
-use crate::{
-    DevnetAccount, SignerState, TransactionLedgerEntry, TransactionState, UnlockedWallet,
-};
+use crate::{DevnetAccount, SignerState, TransactionLedgerEntry, TransactionState, UnlockedWallet};
 use serde::Serialize;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -171,8 +169,8 @@ const fn transaction_state_name(state: TransactionState) -> &'static str {
 mod tests {
     use super::WalletObservabilitySnapshot;
     use crate::{
-        BlockhashLease, Cluster, LockedVault, SecretPassphrase, SecretSeed,
-        TransactionLedgerEntry, VaultError,
+        BlockhashLease, Cluster, LockedVault, SecretPassphrase, SecretSeed, TransactionLedgerEntry,
+        VaultError,
     };
     use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
     use solana_hash::Hash;
@@ -183,11 +181,7 @@ mod tests {
         last_valid_block_height: u64,
         observed_block_height: u64,
     ) -> BlockhashLease {
-        BlockhashLease::new_for_test(
-            blockhash,
-            last_valid_block_height,
-            observed_block_height,
-        )
+        BlockhashLease::new_for_test(blockhash, last_valid_block_height, observed_block_height)
     }
 
     #[test]
@@ -208,8 +202,7 @@ mod tests {
         let transaction = TransactionLedgerEntry::reserve(400_000_000, lease)
             .map_err(|_| VaultError::SerializationFailed)?;
 
-        let snapshot =
-            WalletObservabilitySnapshot::capture(&wallet, &account, Some(&transaction));
+        let snapshot = WalletObservabilitySnapshot::capture(&wallet, &account, Some(&transaction));
 
         let encoded =
             serde_json::to_string(&snapshot).map_err(|_| VaultError::SerializationFailed)?;
@@ -250,16 +243,14 @@ mod tests {
     fn emergency_lock_is_visible_without_exposing_signing_material() -> Result<(), VaultError> {
         let passphrase = SecretPassphrase::new("observability lock test".to_owned());
 
-        let vault =
-            LockedVault::import_seed(&passphrase, SecretSeed::new([174_u8; 32]))?;
+        let vault = LockedVault::import_seed(&passphrase, SecretSeed::new([174_u8; 32]))?;
 
         let mut wallet = vault.unlock(&passphrase)?;
         let account = wallet.devnet_account();
 
         wallet.emergency_lock();
 
-        let snapshot =
-            WalletObservabilitySnapshot::capture(&wallet, &account, None);
+        let snapshot = WalletObservabilitySnapshot::capture(&wallet, &account, None);
 
         assert_eq!(snapshot.signer().state(), "locked");
         assert!(snapshot.signer().signing_locked());
@@ -280,14 +271,12 @@ mod tests {
     fn snapshot_uses_devnet_identity_only() -> Result<(), VaultError> {
         let passphrase = SecretPassphrase::new("observability cluster test".to_owned());
 
-        let vault =
-            LockedVault::import_seed(&passphrase, SecretSeed::new([175_u8; 32]))?;
+        let vault = LockedVault::import_seed(&passphrase, SecretSeed::new([175_u8; 32]))?;
 
         let wallet = vault.unlock(&passphrase)?;
         let account = wallet.devnet_account();
 
-        let snapshot =
-            WalletObservabilitySnapshot::capture(&wallet, &account, None);
+        let snapshot = WalletObservabilitySnapshot::capture(&wallet, &account, None);
 
         assert_eq!(snapshot.cluster(), Cluster::Devnet.rpc_name());
         assert_eq!(snapshot.cluster(), "devnet");
