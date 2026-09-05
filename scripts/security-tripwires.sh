@@ -2,6 +2,8 @@
 set -euo pipefail
 
 readonly REPO_ROOT="$(git rev-parse --show-toplevel)"
+readonly EXPORTER_PATH="crates/wallet-engine/src/bin/export_observability.rs"
+
 cd "${REPO_ROOT}"
 
 fail() {
@@ -30,6 +32,30 @@ assert_absent_in_source() {
     >/dev/null 2>&1; then
     fail "${description}"
   fi
+}
+
+assert_passphrase_boundary() {
+  local matches
+
+  matches="$(
+    git grep \
+      --line-number \
+      --fixed-strings \
+      -- "SCOUT_WALLET_PASSPHRASE" \
+      ':!scripts/security-tripwires.sh' \
+      ':!README.md' \
+      2>/dev/null || true
+  )"
+
+  if [[ -z "${matches}" ]]; then
+    fail "local exporter passphrase boundary is missing"
+  fi
+
+  while IFS= read -r match; do
+    if [[ "${match}" != "${EXPORTER_PATH}:"* ]]; then
+      fail "wallet passphrase environment variable escaped the local exporter boundary"
+    fi
+  done <<< "${matches}"
 }
 
 echo "Checking generated observability artifacts..."
@@ -67,20 +93,7 @@ assert_absent_in_source \
 
 echo "Checking Vercel trust boundary..."
 
-assert_absent_in_source \
-  "SCOUT_WALLET_PASSPHRASE" \
-  "wallet passphrase environment variable must not enter deployed or general source surfaces"
-
-if grep \
-  --line-number \
-  --fixed-strings \
-  "SCOUT_WALLET_PASSPHRASE" \
-  crates/wallet-engine/src/bin/export_observability.rs \
-  >/dev/null 2>&1; then
-  :
-else
-  fail "local exporter passphrase boundary is missing"
-fi
+assert_passphrase_boundary
 
 echo "Checking Devnet lock..."
 
