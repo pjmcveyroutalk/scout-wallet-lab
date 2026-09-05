@@ -19,6 +19,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Run security tripwires
+        run: bash scripts/security-tripwires.sh
+
       - name: Install Rust 1.80.0
         uses: dtolnay/rust-toolchain@1.80.0
         with:
