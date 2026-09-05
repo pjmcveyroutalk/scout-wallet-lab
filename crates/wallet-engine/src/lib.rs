@@ -8,6 +8,7 @@ use chacha20poly1305::{
 };
 use ed25519_dalek::{Signer as _, SigningKey};
 use serde::{Deserialize, Serialize};
+use solana_pubkey::Pubkey;
 use std::fmt;
 use zeroize::{Zeroize, Zeroizing};
 
@@ -28,6 +29,59 @@ const ARGON2_LANES: u32 = 1;
 #[must_use]
 pub const fn engine_name() -> &'static str {
     "scout-wallet-lab"
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Cluster {
+    Devnet,
+}
+
+impl Cluster {
+    #[must_use]
+    pub const fn rpc_name(self) -> &'static str {
+        match self {
+            Self::Devnet => "devnet",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct DevnetAccount {
+    address: Pubkey,
+    lamports: Option<u64>,
+}
+
+impl DevnetAccount {
+    #[must_use]
+    pub const fn new(address: Pubkey) -> Self {
+        Self {
+            address,
+            lamports: None,
+        }
+    }
+
+    #[must_use]
+    pub const fn cluster(&self) -> Cluster {
+        Cluster::Devnet
+    }
+
+    #[must_use]
+    pub const fn address(&self) -> Pubkey {
+        self.address
+    }
+
+    #[must_use]
+    pub const fn lamports(&self) -> Option<u64> {
+        self.lamports
+    }
+
+    pub fn record_balance(&mut self, lamports: u64) {
+        self.lamports = Some(lamports);
+    }
+
+    pub fn clear_balance(&mut self) {
+        self.lamports = None;
+    }
 }
 
 pub struct SecretPassphrase {
@@ -226,6 +280,11 @@ impl LockedVault {
         decode_array::<32>(&self.public_key_b64)
     }
 
+    pub fn devnet_account(&self) -> Result<DevnetAccount, VaultError> {
+        let address = Pubkey::new_from_array(self.public_key()?);
+        Ok(DevnetAccount::new(address))
+    }
+
     pub fn to_json(&self) -> Result<String, VaultError> {
         serde_json::to_string_pretty(self).map_err(|_| VaultError::SerializationFailed)
     }
@@ -300,6 +359,11 @@ impl UnlockedWallet {
         self.signing_key.verifying_key().to_bytes()
     }
 
+    #[must_use]
+    pub fn devnet_account(&self) -> DevnetAccount {
+        DevnetAccount::new(Pubkey::new_from_array(self.public_key()))
+    }
+
     pub fn sign_authorized(
         &self,
         message: &AuthorizedMessage<'_>,
@@ -355,11 +419,12 @@ fn decode_array<const N: usize>(encoded: &str) -> Result<[u8; N], VaultError> {
 #[cfg(test)]
 mod tests {
     use super::{
-        AuthorizedMessage, LockedVault, SecretPassphrase, SecretSeed, SignerError, VaultError,
-        CIPHERTEXT_LEN, VAULT_VERSION,
+        AuthorizedMessage, Cluster, LockedVault, SecretPassphrase, SecretSeed, SignerError,
+        VaultError, CIPHERTEXT_LEN, VAULT_VERSION,
     };
     use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
     use ed25519_dalek::{Signature, Verifier as _, VerifyingKey};
+    use solana_pubkey::Pubkey;
 
     #[test]
     fn engine_identity_is_stable() {
@@ -493,6 +558,48 @@ mod tests {
         let signature = Signature::from_bytes(&signature.to_bytes());
 
         assert!(verifying_key.verify(message_bytes, &signature).is_ok());
+        Ok(())
+    }
+
+    #[test]
+    fn locked_vault_exposes_canonical_devnet_account() -> Result<(), VaultError> {
+        let passphrase = SecretPassphrase::new("account test".to_owned());
+        let vault = LockedVault::import_seed(&passphrase, SecretSeed::new([31_u8; 32]))?;
+        let expected = Pubkey::new_from_array(vault.public_key()?);
+        let account = vault.devnet_account()?;
+
+        assert_eq!(account.address(), expected);
+        assert_eq!(account.cluster(), Cluster::Devnet);
+        assert_eq!(account.cluster().rpc_name(), "devnet");
+        assert_eq!(account.lamports(), None);
+        Ok(())
+    }
+
+    #[test]
+    fn unlocked_wallet_exposes_same_devnet_account() -> Result<(), VaultError> {
+        let passphrase = SecretPassphrase::new("unlocked account test".to_owned());
+        let vault = LockedVault::import_seed(&passphrase, SecretSeed::new([41_u8; 32]))?;
+        let locked_account = vault.devnet_account()?;
+        let unlocked = vault.unlock(&passphrase)?;
+        let unlocked_account = unlocked.devnet_account();
+
+        assert_eq!(locked_account.address(), unlocked_account.address());
+        Ok(())
+    }
+
+    #[test]
+    fn devnet_balance_state_is_explicit() -> Result<(), VaultError> {
+        let passphrase = SecretPassphrase::new("balance state test".to_owned());
+        let vault = LockedVault::import_seed(&passphrase, SecretSeed::new([53_u8; 32]))?;
+        let mut account = vault.devnet_account()?;
+
+        assert_eq!(account.lamports(), None);
+
+        account.record_balance(1_500_000_000);
+        assert_eq!(account.lamports(), Some(1_500_000_000));
+
+        account.clear_balance();
+        assert_eq!(account.lamports(), None);
         Ok(())
     }
 }
