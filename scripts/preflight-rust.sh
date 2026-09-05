@@ -17,13 +17,16 @@ cargo_180() {
   rustup run "${TOOLCHAIN}" cargo "$@"
 }
 
+echo "Verifying committed dependency lockfile..."
+cargo_180 metadata --locked --format-version 1 --no-deps >/dev/null
+
 echo "Checking exact Rust ${TOOLCHAIN} formatting..."
 cargo_180 fmt --all -- --check
 
-echo "Running Clippy..."
-cargo_180 clippy --workspace --all-targets -- -D warnings
+echo "Running Clippy with locked dependencies..."
+cargo_180 clippy --locked --workspace --all-targets -- -D warnings
 
-echo "Running workspace tests..."
-cargo_180 test --workspace --all-targets
+echo "Running workspace tests with locked dependencies..."
+cargo_180 test --locked --workspace --all-targets
 
 echo "Scout Wallet Lab Rust ${TOOLCHAIN} preflight passed."
