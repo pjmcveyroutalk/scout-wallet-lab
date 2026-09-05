@@ -481,8 +481,8 @@ mod tests {
         let unlocked = vault.unlock(&passphrase)?;
         let public_key = unlocked.public_key();
         let message_bytes = b"scout authorized execution message";
-        let message = AuthorizedMessage::new(message_bytes)
-            .map_err(|_| VaultError::SerializationFailed)?;
+        let message =
+            AuthorizedMessage::new(message_bytes).map_err(|_| VaultError::SerializationFailed)?;
         let signature = unlocked
             .sign_authorized(&message)
             .map_err(|_| VaultError::SerializationFailed)?;
