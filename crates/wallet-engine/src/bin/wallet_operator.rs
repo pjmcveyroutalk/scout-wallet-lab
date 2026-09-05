@@ -250,8 +250,7 @@ mod tests {
     }
 
     #[test]
-    fn locked_and_unlocked_wallet_identity_must_match(
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    fn locked_and_unlocked_wallet_identity_must_match() -> Result<(), Box<dyn std::error::Error>> {
         let passphrase = SecretPassphrase::new("identity verification test".to_owned());
         let vault = LockedVault::import_seed(&passphrase, SecretSeed::new([212_u8; 32]))?;
 
@@ -266,8 +265,7 @@ mod tests {
     }
 
     #[test]
-    fn identity_verification_rejects_wrong_passphrase(
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    fn identity_verification_rejects_wrong_passphrase() -> Result<(), Box<dyn std::error::Error>> {
         let correct = SecretPassphrase::new("correct operator passphrase".to_owned());
         let wrong = SecretPassphrase::new("incorrect operator passphrase".to_owned());
         let vault = LockedVault::import_seed(&correct, SecretSeed::new([213_u8; 32]))?;
