@@ -1,0 +1,635 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1, viewport-fit=cover"
+  >
+  <meta name="theme-color" content="#08111f">
+  <title>Scout Wallet Lab</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --background: #08111f;
+      --surface: #0e1a2b;
+      --surface-raised: #142238;
+      --border: #263750;
+      --text: #f4f7fb;
+      --muted: #9fb0c6;
+      --green: #43d17d;
+      --yellow: #f4c453;
+      --red: #f46b6b;
+      --blue: #6bb6ff;
+      --radius: 18px;
+      --shadow: 0 18px 50px rgba(0, 0, 0, 0.26);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background:
+        radial-gradient(circle at top, rgba(63, 118, 181, 0.14), transparent 38%),
+        var(--background);
+      color: var(--text);
+      font-family:
+        Inter,
+        ui-sans-serif,
+        system-ui,
+        -apple-system,
+        BlinkMacSystemFont,
+        "Segoe UI",
+        sans-serif;
+    }
+
+    button,
+    input {
+      font: inherit;
+    }
+
+    button {
+      cursor: pointer;
+    }
+
+    .shell {
+      width: min(1180px, 100%);
+      margin: 0 auto;
+      padding:
+        max(20px, env(safe-area-inset-top))
+        18px
+        max(34px, env(safe-area-inset-bottom));
+    }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 22px;
+    }
+
+    .identity {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      min-width: 0;
+    }
+
+    .mark {
+      display: grid;
+      place-items: center;
+      width: 42px;
+      height: 42px;
+      flex: 0 0 auto;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      background: var(--surface-raised);
+      box-shadow: var(--shadow);
+      font-weight: 800;
+      letter-spacing: -0.04em;
+    }
+
+    .title-wrap {
+      min-width: 0;
+    }
+
+    h1,
+    h2,
+    p {
+      margin: 0;
+    }
+
+    h1 {
+      font-size: clamp(1.05rem, 4vw, 1.35rem);
+      letter-spacing: -0.025em;
+    }
+
+    .subtitle {
+      margin-top: 3px;
+      color: var(--muted);
+      font-size: 0.78rem;
+    }
+
+    .network-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      flex: 0 0 auto;
+      padding: 8px 11px;
+      border: 1px solid rgba(107, 182, 255, 0.34);
+      border-radius: 999px;
+      background: rgba(107, 182, 255, 0.09);
+      color: #cce6ff;
+      font-size: 0.76rem;
+      font-weight: 700;
+    }
+
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: currentColor;
+      box-shadow: 0 0 14px currentColor;
+    }
+
+    .warning {
+      margin-bottom: 18px;
+      padding: 13px 15px;
+      border: 1px solid rgba(244, 196, 83, 0.32);
+      border-radius: 14px;
+      background: rgba(244, 196, 83, 0.07);
+      color: #ffe6a7;
+      font-size: 0.8rem;
+      line-height: 1.45;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(12, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .card {
+      grid-column: span 12;
+      min-width: 0;
+      padding: 17px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: linear-gradient(
+        180deg,
+        rgba(255, 255, 255, 0.025),
+        rgba(255, 255, 255, 0)
+      ), var(--surface);
+      box-shadow: var(--shadow);
+    }
+
+    .card-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+
+    .card-title {
+      font-size: 0.86rem;
+      font-weight: 750;
+      letter-spacing: 0.01em;
+    }
+
+    .card-note {
+      margin-top: 4px;
+      color: var(--muted);
+      font-size: 0.74rem;
+      line-height: 1.4;
+    }
+
+    .status {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      flex: 0 0 auto;
+      padding: 6px 9px;
+      border-radius: 999px;
+      font-size: 0.7rem;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .status.green {
+      color: #9bf0bc;
+      background: rgba(67, 209, 125, 0.1);
+      border: 1px solid rgba(67, 209, 125, 0.25);
+    }
+
+    .status.yellow {
+      color: #ffe19b;
+      background: rgba(244, 196, 83, 0.1);
+      border: 1px solid rgba(244, 196, 83, 0.25);
+    }
+
+    .status.red {
+      color: #ffb1b1;
+      background: rgba(244, 107, 107, 0.1);
+      border: 1px solid rgba(244, 107, 107, 0.25);
+    }
+
+    .metric {
+      font-size: clamp(1.7rem, 7vw, 2.55rem);
+      line-height: 1;
+      font-weight: 800;
+      letter-spacing: -0.05em;
+    }
+
+    .metric-unit {
+      margin-left: 7px;
+      color: var(--muted);
+      font-size: 0.88rem;
+      font-weight: 650;
+      letter-spacing: 0;
+    }
+
+    .key-value {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 10px;
+      padding: 11px 0;
+      border-bottom: 1px solid rgba(159, 176, 198, 0.11);
+      font-size: 0.81rem;
+    }
+
+    .key-value:last-child {
+      border-bottom: 0;
+      padding-bottom: 0;
+    }
+
+    .key {
+      color: var(--muted);
+    }
+
+    .value {
+      min-width: 0;
+      overflow-wrap: anywhere;
+      text-align: right;
+      font-weight: 700;
+    }
+
+    .address {
+      display: block;
+      margin-top: 13px;
+      padding: 12px;
+      overflow-wrap: anywhere;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: rgba(0, 0, 0, 0.18);
+      color: #d6e7fb;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.72rem;
+      line-height: 1.5;
+    }
+
+    .controls {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 10px;
+    }
+
+    .button {
+      width: 100%;
+      min-height: 48px;
+      padding: 12px 14px;
+      border-radius: 13px;
+      font-weight: 800;
+      border: 1px solid var(--border);
+    }
+
+    .button.secondary {
+      background: var(--surface-raised);
+      color: var(--text);
+    }
+
+    .button.danger {
+      border-color: rgba(244, 107, 107, 0.4);
+      background: rgba(244, 107, 107, 0.1);
+      color: #ffc1c1;
+    }
+
+    .button[disabled] {
+      cursor: not-allowed;
+      opacity: 0.52;
+    }
+
+    .policy-list,
+    .event-list {
+      display: grid;
+      gap: 9px;
+    }
+
+    .policy-row,
+    .event {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 11px 12px;
+      border: 1px solid rgba(159, 176, 198, 0.12);
+      border-radius: 12px;
+      background: rgba(0, 0, 0, 0.11);
+    }
+
+    .policy-label,
+    .event-title {
+      color: var(--muted);
+      font-size: 0.76rem;
+    }
+
+    .policy-value,
+    .event-state {
+      text-align: right;
+      font-size: 0.77rem;
+      font-weight: 750;
+    }
+
+    .empty {
+      padding: 26px 14px;
+      border: 1px dashed rgba(159, 176, 198, 0.21);
+      border-radius: 14px;
+      color: var(--muted);
+      text-align: center;
+      font-size: 0.78rem;
+      line-height: 1.5;
+    }
+
+    .security-footer {
+      margin-top: 18px;
+      color: var(--muted);
+      font-size: 0.7rem;
+      text-align: center;
+      line-height: 1.55;
+    }
+
+    @media (min-width: 720px) {
+      .shell {
+        padding-left: 24px;
+        padding-right: 24px;
+      }
+
+      .span-4 {
+        grid-column: span 4;
+      }
+
+      .span-6 {
+        grid-column: span 6;
+      }
+
+      .span-8 {
+        grid-column: span 8;
+      }
+
+      .controls {
+        grid-template-columns: 1fr 1fr;
+      }
+    }
+
+    @media (min-width: 1020px) {
+      .card {
+        padding: 20px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <header class="topbar">
+      <div class="identity">
+        <div class="mark" aria-hidden="true">S</div>
+        <div class="title-wrap">
+          <h1>Scout Wallet Lab</h1>
+          <p class="subtitle">Execution wallet observability</p>
+        </div>
+      </div>
+
+      <div class="network-badge">
+        <span class="dot" aria-hidden="true"></span>
+        Devnet only
+      </div>
+    </header>
+
+    <div class="warning">
+      This dashboard is an observability and control surface only.
+      Private keys, seed material, passphrases, decrypted keys, and signing
+      secrets must never enter the browser or Vercel environment.
+    </div>
+
+    <section class="grid" aria-label="Wallet dashboard">
+      <article class="card span-4">
+        <div class="card-header">
+          <div>
+            <h2 class="card-title">Signer</h2>
+            <p class="card-note">Emergency signing boundary</p>
+          </div>
+          <span class="status green" id="signer-status">
+            <span class="dot" aria-hidden="true"></span>
+            Running
+          </span>
+        </div>
+
+        <div class="key-value">
+          <span class="key">Cluster</span>
+          <span class="value">Devnet</span>
+        </div>
+        <div class="key-value">
+          <span class="key">Mainnet</span>
+          <span class="value">Disabled</span>
+        </div>
+        <div class="key-value">
+          <span class="key">Signing authority</span>
+          <span class="value">Local Rust engine</span>
+        </div>
+      </article>
+
+      <article class="card span-4">
+        <div class="card-header">
+          <div>
+            <h2 class="card-title">Balance</h2>
+            <p class="card-note">Read-only devnet account view</p>
+          </div>
+          <span class="status yellow">Awaiting engine</span>
+        </div>
+
+        <div class="metric">
+          —
+          <span class="metric-unit">SOL</span>
+        </div>
+
+        <div class="address">
+          Public address will be supplied by the wallet engine.
+        </div>
+      </article>
+
+      <article class="card span-4">
+        <div class="card-header">
+          <div>
+            <h2 class="card-title">Reserved capital</h2>
+            <p class="card-note">Ledger-controlled exposure</p>
+          </div>
+          <span class="status green">Protected</span>
+        </div>
+
+        <div class="metric">
+          0
+          <span class="metric-unit">lamports</span>
+        </div>
+
+        <div class="key-value">
+          <span class="key">Ambiguous capital</span>
+          <span class="value">0</span>
+        </div>
+        <div class="key-value">
+          <span class="key">Quarantined capital</span>
+          <span class="value">0</span>
+        </div>
+      </article>
+
+      <article class="card span-6">
+        <div class="card-header">
+          <div>
+            <h2 class="card-title">Execution policy</h2>
+            <p class="card-note">
+              Dashboard can observe policy decisions but cannot mint authorization.
+            </p>
+          </div>
+          <span class="status green">Enforced</span>
+        </div>
+
+        <div class="policy-list">
+          <div class="policy-row">
+            <span class="policy-label">Program allowlist</span>
+            <span class="policy-value">Engine enforced</span>
+          </div>
+          <div class="policy-row">
+            <span class="policy-label">Exposure ceiling</span>
+            <span class="policy-value">Engine enforced</span>
+          </div>
+          <div class="policy-row">
+            <span class="policy-label">Fresh blockhash</span>
+            <span class="policy-value">Required</span>
+          </div>
+          <div class="policy-row">
+            <span class="policy-label">Reserved state</span>
+            <span class="policy-value">Required</span>
+          </div>
+          <div class="policy-row">
+            <span class="policy-label">Arbitrary signing</span>
+            <span class="policy-value">Blocked</span>
+          </div>
+        </div>
+      </article>
+
+      <article class="card span-6">
+        <div class="card-header">
+          <div>
+            <h2 class="card-title">Controls</h2>
+            <p class="card-note">
+              UI wiring is intentionally disabled until the trusted engine bridge exists.
+            </p>
+          </div>
+          <span class="status yellow">Offline</span>
+        </div>
+
+        <div class="controls">
+          <button
+            class="button secondary"
+            type="button"
+            disabled
+            aria-disabled="true"
+          >
+            Refresh wallet state
+          </button>
+
+          <button
+            class="button danger"
+            type="button"
+            disabled
+            aria-disabled="true"
+          >
+            Emergency lock signer
+          </button>
+        </div>
+      </article>
+
+      <article class="card span-6">
+        <div class="card-header">
+          <div>
+            <h2 class="card-title">Transaction lifecycle</h2>
+            <p class="card-note">Current ledger state</p>
+          </div>
+          <span class="status green">Idle</span>
+        </div>
+
+        <div class="event-list">
+          <div class="event">
+            <span class="event-title">Reserved</span>
+            <span class="event-state">0</span>
+          </div>
+          <div class="event">
+            <span class="event-title">Signed</span>
+            <span class="event-state">0</span>
+          </div>
+          <div class="event">
+            <span class="event-title">Submitted</span>
+            <span class="event-state">0</span>
+          </div>
+          <div class="event">
+            <span class="event-title">Ambiguous</span>
+            <span class="event-state">0</span>
+          </div>
+          <div class="event">
+            <span class="event-title">Quarantined</span>
+            <span class="event-state">0</span>
+          </div>
+        </div>
+      </article>
+
+      <article class="card span-6">
+        <div class="card-header">
+          <div>
+            <h2 class="card-title">Recent wallet events</h2>
+            <p class="card-note">
+              Only non-secret operational metadata belongs here.
+            </p>
+          </div>
+          <span class="status yellow">No feed</span>
+        </div>
+
+        <div class="empty">
+          No wallet-engine event source is connected yet.
+          Signing secrets and message payloads will never be rendered here.
+        </div>
+      </article>
+
+      <article class="card span-12">
+        <div class="card-header">
+          <div>
+            <h2 class="card-title">Security boundary</h2>
+            <p class="card-note">
+              Browser and Vercel remain outside the signing trust boundary.
+            </p>
+          </div>
+          <span class="status green">Locked</span>
+        </div>
+
+        <div class="key-value">
+          <span class="key">Private key in frontend</span>
+          <span class="value">Never</span>
+        </div>
+        <div class="key-value">
+          <span class="key">Seed in frontend</span>
+          <span class="value">Never</span>
+        </div>
+        <div class="key-value">
+          <span class="key">Passphrase in frontend</span>
+          <span class="value">Never</span>
+        </div>
+        <div class="key-value">
+          <span class="key">Arbitrary RPC endpoint</span>
+          <span class="value">Disabled</span>
+        </div>
+        <div class="key-value">
+          <span class="key">Transaction submission</span>
+          <span class="value">Not connected</span>
+        </div>
+      </article>
+    </section>
+
+    <footer class="security-footer">
+      Scout Wallet Lab · devnet safety surface · no production funds
+    </footer>
+  </main>
+</body>
+</html>
