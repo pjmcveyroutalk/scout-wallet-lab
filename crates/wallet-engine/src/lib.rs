@@ -1474,13 +1474,11 @@ mod tests {
             data: vec![1_u8, 3_u8, 5_u8],
         };
         let lease = test_lease(blockhash, 600, 590);
-        let prepared =
-            PreparedTransaction::reserve(&[instruction], payer, 500_000_000, lease)?;
+        let prepared = PreparedTransaction::reserve(&[instruction], payer, 500_000_000, lease)?;
 
-        let decoded: Message = bincode::deserialize(prepared.message().bytes())
-            .map_err(|_| PreparedTransactionError::Message(
-                TransactionMessageError::SerializationFailed,
-            ))?;
+        let decoded: Message = bincode::deserialize(prepared.message().bytes()).map_err(|_| {
+            PreparedTransactionError::Message(TransactionMessageError::SerializationFailed)
+        })?;
 
         assert_eq!(decoded.recent_blockhash, blockhash);
         assert_eq!(prepared.ledger().recent_blockhash(), blockhash);
