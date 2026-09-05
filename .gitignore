@@ -8,3 +8,5 @@ target/
 *.secret
 wallet-data/
 vault-data/
+dashboard/wallet-observability.json
+dashboard/.wallet-observability.json.tmp
