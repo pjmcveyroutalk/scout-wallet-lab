@@ -429,6 +429,201 @@ impl SignatureBytes {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TransactionState {
+    Reserved,
+    Signed,
+    Submitted,
+    Confirmed,
+    Failed,
+    Ambiguous,
+    Settled,
+    Released,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LedgerError {
+    ZeroReservation,
+    InvalidTransition,
+    BlockhashStillValid,
+}
+
+impl fmt::Display for LedgerError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let message = match self {
+            Self::ZeroReservation => "transaction reservation must be greater than zero",
+            Self::InvalidTransition => "transaction lifecycle transition is invalid",
+            Self::BlockhashStillValid => "transaction blockhash is still valid",
+        };
+        formatter.write_str(message)
+    }
+}
+
+impl std::error::Error for LedgerError {}
+
+pub struct TransactionLedgerEntry {
+    reserved_lamports: u64,
+    recent_blockhash: Hash,
+    last_valid_block_height: u64,
+    signature: Option<SignatureBytes>,
+    state: TransactionState,
+}
+
+impl TransactionLedgerEntry {
+    pub fn reserve(
+        reserved_lamports: u64,
+        recent_blockhash: Hash,
+        last_valid_block_height: u64,
+    ) -> Result<Self, LedgerError> {
+        if reserved_lamports == 0 {
+            return Err(LedgerError::ZeroReservation);
+        }
+
+        Ok(Self {
+            reserved_lamports,
+            recent_blockhash,
+            last_valid_block_height,
+            signature: None,
+            state: TransactionState::Reserved,
+        })
+    }
+
+    #[must_use]
+    pub const fn reserved_lamports(&self) -> u64 {
+        self.reserved_lamports
+    }
+
+    #[must_use]
+    pub const fn recent_blockhash(&self) -> Hash {
+        self.recent_blockhash
+    }
+
+    #[must_use]
+    pub const fn last_valid_block_height(&self) -> u64 {
+        self.last_valid_block_height
+    }
+
+    #[must_use]
+    pub const fn signature(&self) -> Option<SignatureBytes> {
+        self.signature
+    }
+
+    #[must_use]
+    pub const fn state(&self) -> TransactionState {
+        self.state
+    }
+
+    #[must_use]
+    pub const fn capital_is_reserved(&self) -> bool {
+        !matches!(
+            self.state,
+            TransactionState::Settled | TransactionState::Released
+        )
+    }
+
+    #[must_use]
+    pub const fn can_retry_delivery(&self, current_block_height: u64) -> bool {
+        matches!(
+            self.state,
+            TransactionState::Submitted | TransactionState::Ambiguous
+        ) && current_block_height <= self.last_valid_block_height
+    }
+
+    #[must_use]
+    pub const fn can_rebuild_economic_intent(&self) -> bool {
+        matches!(self.state, TransactionState::Released)
+    }
+
+    pub fn mark_signed(&mut self, signature: SignatureBytes) -> Result<(), LedgerError> {
+        if self.state != TransactionState::Reserved {
+            return Err(LedgerError::InvalidTransition);
+        }
+
+        self.signature = Some(signature);
+        self.state = TransactionState::Signed;
+        Ok(())
+    }
+
+    pub fn mark_submitted(&mut self) -> Result<(), LedgerError> {
+        if self.state != TransactionState::Signed {
+            return Err(LedgerError::InvalidTransition);
+        }
+
+        self.state = TransactionState::Submitted;
+        Ok(())
+    }
+
+    pub fn mark_ambiguous(&mut self) -> Result<(), LedgerError> {
+        if self.state != TransactionState::Submitted {
+            return Err(LedgerError::InvalidTransition);
+        }
+
+        self.state = TransactionState::Ambiguous;
+        Ok(())
+    }
+
+    pub fn mark_confirmed(&mut self) -> Result<(), LedgerError> {
+        if !matches!(
+            self.state,
+            TransactionState::Submitted | TransactionState::Ambiguous
+        ) {
+            return Err(LedgerError::InvalidTransition);
+        }
+
+        self.state = TransactionState::Confirmed;
+        Ok(())
+    }
+
+    pub fn mark_failed(&mut self) -> Result<(), LedgerError> {
+        if !matches!(
+            self.state,
+            TransactionState::Submitted | TransactionState::Ambiguous
+        ) {
+            return Err(LedgerError::InvalidTransition);
+        }
+
+        self.state = TransactionState::Failed;
+        Ok(())
+    }
+
+    pub fn settle(&mut self) -> Result<(), LedgerError> {
+        if self.state != TransactionState::Confirmed {
+            return Err(LedgerError::InvalidTransition);
+        }
+
+        self.state = TransactionState::Settled;
+        Ok(())
+    }
+
+    pub fn release_terminal_failure(&mut self) -> Result<(), LedgerError> {
+        if self.state != TransactionState::Failed {
+            return Err(LedgerError::InvalidTransition);
+        }
+
+        self.state = TransactionState::Released;
+        Ok(())
+    }
+
+    pub fn release_if_expired(&mut self, current_block_height: u64) -> Result<(), LedgerError> {
+        if current_block_height <= self.last_valid_block_height {
+            return Err(LedgerError::BlockhashStillValid);
+        }
+
+        if !matches!(
+            self.state,
+            TransactionState::Reserved
+                | TransactionState::Signed
+                | TransactionState::Submitted
+                | TransactionState::Ambiguous
+        ) {
+            return Err(LedgerError::InvalidTransition);
+        }
+
+        self.state = TransactionState::Released;
+        Ok(())
+    }
+}
+
 impl LockedVault {
     pub fn generate(passphrase: &SecretPassphrase) -> Result<Self, VaultError> {
         let mut seed = [0_u8; SEED_LEN];
@@ -644,8 +839,9 @@ fn decode_array<const N: usize>(encoded: &str) -> Result<[u8; N], VaultError> {
 mod tests {
     use super::{
         build_get_balance_request, AuthorizedMessage, AuthorizedTransactionMessage,
-        CanonicalTransactionMessage, Cluster, LockedVault, SecretPassphrase, SecretSeed,
-        SignerError, TransactionMessageError, VaultError, CIPHERTEXT_LEN, VAULT_VERSION,
+        CanonicalTransactionMessage, Cluster, LedgerError, LockedVault, SecretPassphrase,
+        SecretSeed, SignatureBytes, SignerError, TransactionLedgerEntry,
+        TransactionMessageError, TransactionState, VaultError, CIPHERTEXT_LEN, VAULT_VERSION,
     };
     use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
     use ed25519_dalek::{Signature, Verifier as _, VerifyingKey};
@@ -901,6 +1097,104 @@ mod tests {
         let signature = Signature::from_bytes(&signature.to_bytes());
 
         assert!(verifying_key.verify(canonical.bytes(), &signature).is_ok());
+        Ok(())
+    }
+
+    #[test]
+    fn zero_transaction_reservation_is_rejected() {
+        let blockhash = Hash::new_from_array([107_u8; 32]);
+        let result = TransactionLedgerEntry::reserve(0, blockhash, 500);
+
+        assert!(matches!(result, Err(LedgerError::ZeroReservation)));
+    }
+
+    #[test]
+    fn ambiguous_submission_holds_capital_until_expiry() -> Result<(), LedgerError> {
+        let blockhash = Hash::new_from_array([109_u8; 32]);
+        let mut entry = TransactionLedgerEntry::reserve(900_000_000, blockhash, 500)?;
+        let signature = SignatureBytes {
+            value: [113_u8; 64],
+        };
+
+        entry.mark_signed(signature)?;
+        entry.mark_submitted()?;
+        entry.mark_ambiguous()?;
+
+        assert_eq!(entry.state(), TransactionState::Ambiguous);
+        assert!(entry.capital_is_reserved());
+        assert!(entry.can_retry_delivery(500));
+        assert!(!entry.can_rebuild_economic_intent());
+
+        let early_release = entry.release_if_expired(500);
+        assert!(matches!(
+            early_release,
+            Err(LedgerError::BlockhashStillValid)
+        ));
+
+        entry.release_if_expired(501)?;
+
+        assert_eq!(entry.state(), TransactionState::Released);
+        assert!(!entry.capital_is_reserved());
+        assert!(entry.can_rebuild_economic_intent());
+        Ok(())
+    }
+
+    #[test]
+    fn confirmed_submission_must_settle_before_capital_releases() -> Result<(), LedgerError> {
+        let blockhash = Hash::new_from_array([127_u8; 32]);
+        let mut entry = TransactionLedgerEntry::reserve(700_000_000, blockhash, 900)?;
+        let signature = SignatureBytes {
+            value: [131_u8; 64],
+        };
+
+        entry.mark_signed(signature)?;
+        entry.mark_submitted()?;
+        entry.mark_confirmed()?;
+
+        assert_eq!(entry.state(), TransactionState::Confirmed);
+        assert!(entry.capital_is_reserved());
+        assert!(!entry.can_rebuild_economic_intent());
+
+        entry.settle()?;
+
+        assert_eq!(entry.state(), TransactionState::Settled);
+        assert!(!entry.capital_is_reserved());
+        assert!(!entry.can_rebuild_economic_intent());
+        Ok(())
+    }
+
+    #[test]
+    fn terminal_failure_requires_explicit_release() -> Result<(), LedgerError> {
+        let blockhash = Hash::new_from_array([137_u8; 32]);
+        let mut entry = TransactionLedgerEntry::reserve(400_000_000, blockhash, 1_200)?;
+        let signature = SignatureBytes {
+            value: [139_u8; 64],
+        };
+
+        entry.mark_signed(signature)?;
+        entry.mark_submitted()?;
+        entry.mark_failed()?;
+
+        assert_eq!(entry.state(), TransactionState::Failed);
+        assert!(entry.capital_is_reserved());
+        assert!(!entry.can_rebuild_economic_intent());
+
+        entry.release_terminal_failure()?;
+
+        assert_eq!(entry.state(), TransactionState::Released);
+        assert!(!entry.capital_is_reserved());
+        assert!(entry.can_rebuild_economic_intent());
+        Ok(())
+    }
+
+    #[test]
+    fn invalid_lifecycle_transition_is_rejected() -> Result<(), LedgerError> {
+        let blockhash = Hash::new_from_array([149_u8; 32]);
+        let mut entry = TransactionLedgerEntry::reserve(200_000_000, blockhash, 1_500)?;
+        let result = entry.mark_submitted();
+
+        assert!(matches!(result, Err(LedgerError::InvalidTransition)));
+        assert_eq!(entry.state(), TransactionState::Reserved);
         Ok(())
     }
 }
