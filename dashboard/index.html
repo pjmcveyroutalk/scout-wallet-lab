@@ -8,6 +8,7 @@
   >
   <meta name="theme-color" content="#08111f">
   <title>Scout Wallet Lab</title>
+
   <style>
     :root {
       color-scheme: dark;
@@ -46,12 +47,8 @@
         sans-serif;
     }
 
-    button,
-    input {
-      font: inherit;
-    }
-
     button {
+      font: inherit;
       cursor: pointer;
     }
 
@@ -147,6 +144,28 @@
       line-height: 1.45;
     }
 
+    .bridge {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 18px;
+      padding: 12px 14px;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      background: rgba(14, 26, 43, 0.82);
+      font-size: 0.76rem;
+    }
+
+    .bridge-label {
+      color: var(--muted);
+    }
+
+    .bridge-value {
+      text-align: right;
+      font-weight: 800;
+    }
+
     .grid {
       display: grid;
       grid-template-columns: repeat(12, minmax(0, 1fr));
@@ -159,11 +178,13 @@
       padding: 17px;
       border: 1px solid var(--border);
       border-radius: var(--radius);
-      background: linear-gradient(
-        180deg,
-        rgba(255, 255, 255, 0.025),
-        rgba(255, 255, 255, 0)
-      ), var(--surface);
+      background:
+        linear-gradient(
+          180deg,
+          rgba(255, 255, 255, 0.025),
+          rgba(255, 255, 255, 0)
+        ),
+        var(--surface);
       box-shadow: var(--shadow);
     }
 
@@ -194,6 +215,7 @@
       gap: 7px;
       flex: 0 0 auto;
       padding: 6px 9px;
+      border: 1px solid transparent;
       border-radius: 999px;
       font-size: 0.7rem;
       font-weight: 800;
@@ -204,19 +226,19 @@
     .status.green {
       color: #9bf0bc;
       background: rgba(67, 209, 125, 0.1);
-      border: 1px solid rgba(67, 209, 125, 0.25);
+      border-color: rgba(67, 209, 125, 0.25);
     }
 
     .status.yellow {
       color: #ffe19b;
       background: rgba(244, 196, 83, 0.1);
-      border: 1px solid rgba(244, 196, 83, 0.25);
+      border-color: rgba(244, 196, 83, 0.25);
     }
 
     .status.red {
       color: #ffb1b1;
       background: rgba(244, 107, 107, 0.1);
-      border: 1px solid rgba(244, 107, 107, 0.25);
+      border-color: rgba(244, 107, 107, 0.25);
     }
 
     .metric {
@@ -283,9 +305,9 @@
       width: 100%;
       min-height: 48px;
       padding: 12px 14px;
+      border: 1px solid var(--border);
       border-radius: 13px;
       font-weight: 800;
-      border: 1px solid var(--border);
     }
 
     .button.secondary {
@@ -367,10 +389,6 @@
         grid-column: span 6;
       }
 
-      .span-8 {
-        grid-column: span 8;
-      }
-
       .controls {
         grid-template-columns: 1fr 1fr;
       }
@@ -383,11 +401,13 @@
     }
   </style>
 </head>
+
 <body>
   <main class="shell">
     <header class="topbar">
       <div class="identity">
         <div class="mark" aria-hidden="true">S</div>
+
         <div class="title-wrap">
           <h1>Scout Wallet Lab</h1>
           <p class="subtitle">Execution wallet observability</p>
@@ -401,9 +421,14 @@
     </header>
 
     <div class="warning">
-      This dashboard is an observability and control surface only.
-      Private keys, seed material, passphrases, decrypted keys, and signing
-      secrets must never enter the browser or Vercel environment.
+      This dashboard is an observability surface only. Private keys, seed
+      material, passphrases, decrypted keys, signing secrets, and transaction
+      payloads must never enter the browser or Vercel environment.
+    </div>
+
+    <div class="bridge">
+      <span class="bridge-label">Observability bridge</span>
+      <span class="bridge-value" id="bridge-status">Waiting for snapshot</span>
     </div>
 
     <section class="grid" aria-label="Wallet dashboard">
@@ -413,20 +438,23 @@
             <h2 class="card-title">Signer</h2>
             <p class="card-note">Emergency signing boundary</p>
           </div>
-          <span class="status green" id="signer-status">
+
+          <span class="status yellow" id="signer-status">
             <span class="dot" aria-hidden="true"></span>
-            Running
+            Unknown
           </span>
         </div>
 
         <div class="key-value">
           <span class="key">Cluster</span>
-          <span class="value">Devnet</span>
+          <span class="value" id="cluster-value">Devnet</span>
         </div>
+
         <div class="key-value">
           <span class="key">Mainnet</span>
           <span class="value">Disabled</span>
         </div>
+
         <div class="key-value">
           <span class="key">Signing authority</span>
           <span class="value">Local Rust engine</span>
@@ -439,15 +467,18 @@
             <h2 class="card-title">Balance</h2>
             <p class="card-note">Read-only devnet account view</p>
           </div>
-          <span class="status yellow">Awaiting engine</span>
+
+          <span class="status yellow" id="balance-status">
+            Awaiting engine
+          </span>
         </div>
 
         <div class="metric">
-          —
+          <span id="balance-value">—</span>
           <span class="metric-unit">SOL</span>
         </div>
 
-        <div class="address">
+        <div class="address" id="wallet-address">
           Public address will be supplied by the wallet engine.
         </div>
       </article>
@@ -458,21 +489,25 @@
             <h2 class="card-title">Reserved capital</h2>
             <p class="card-note">Ledger-controlled exposure</p>
           </div>
-          <span class="status green">Protected</span>
+
+          <span class="status green" id="capital-status">
+            Protected
+          </span>
         </div>
 
         <div class="metric">
-          0
+          <span id="reserved-lamports">0</span>
           <span class="metric-unit">lamports</span>
         </div>
 
         <div class="key-value">
-          <span class="key">Ambiguous capital</span>
-          <span class="value">0</span>
+          <span class="key">Capital reserved</span>
+          <span class="value" id="capital-reserved">No</span>
         </div>
+
         <div class="key-value">
-          <span class="key">Quarantined capital</span>
-          <span class="value">0</span>
+          <span class="key">Signature present</span>
+          <span class="value" id="signature-present">No</span>
         </div>
       </article>
 
@@ -481,9 +516,10 @@
           <div>
             <h2 class="card-title">Execution policy</h2>
             <p class="card-note">
-              Dashboard can observe policy decisions but cannot mint authorization.
+              Dashboard can observe policy results but cannot mint authorization.
             </p>
           </div>
+
           <span class="status green">Enforced</span>
         </div>
 
@@ -492,18 +528,22 @@
             <span class="policy-label">Program allowlist</span>
             <span class="policy-value">Engine enforced</span>
           </div>
+
           <div class="policy-row">
             <span class="policy-label">Exposure ceiling</span>
             <span class="policy-value">Engine enforced</span>
           </div>
+
           <div class="policy-row">
             <span class="policy-label">Fresh blockhash</span>
             <span class="policy-value">Required</span>
           </div>
+
           <div class="policy-row">
             <span class="policy-label">Reserved state</span>
             <span class="policy-value">Required</span>
           </div>
+
           <div class="policy-row">
             <span class="policy-label">Arbitrary signing</span>
             <span class="policy-value">Blocked</span>
@@ -516,18 +556,19 @@
           <div>
             <h2 class="card-title">Controls</h2>
             <p class="card-note">
-              UI wiring is intentionally disabled until the trusted engine bridge exists.
+              Signing controls remain disabled until a separately authenticated
+              trusted control bridge exists.
             </p>
           </div>
-          <span class="status yellow">Offline</span>
+
+          <span class="status yellow">Read only</span>
         </div>
 
         <div class="controls">
           <button
             class="button secondary"
+            id="refresh-button"
             type="button"
-            disabled
-            aria-disabled="true"
           >
             Refresh wallet state
           </button>
@@ -547,31 +588,33 @@
         <div class="card-header">
           <div>
             <h2 class="card-title">Transaction lifecycle</h2>
-            <p class="card-note">Current ledger state</p>
+            <p class="card-note">Current safe ledger observation</p>
           </div>
-          <span class="status green">Idle</span>
+
+          <span class="status yellow" id="transaction-status">
+            No transaction
+          </span>
         </div>
 
         <div class="event-list">
           <div class="event">
-            <span class="event-title">Reserved</span>
-            <span class="event-state">0</span>
+            <span class="event-title">State</span>
+            <span class="event-state" id="transaction-state">—</span>
           </div>
+
           <div class="event">
-            <span class="event-title">Signed</span>
-            <span class="event-state">0</span>
+            <span class="event-title">Last valid block height</span>
+            <span class="event-state" id="last-valid-height">—</span>
           </div>
+
           <div class="event">
-            <span class="event-title">Submitted</span>
-            <span class="event-state">0</span>
+            <span class="event-title">Retry delivery allowed</span>
+            <span class="event-state" id="retry-allowed">—</span>
           </div>
+
           <div class="event">
-            <span class="event-title">Ambiguous</span>
-            <span class="event-state">0</span>
-          </div>
-          <div class="event">
-            <span class="event-title">Quarantined</span>
-            <span class="event-state">0</span>
+            <span class="event-title">Rebuild economic intent</span>
+            <span class="event-state" id="rebuild-allowed">—</span>
           </div>
         </div>
       </article>
@@ -579,21 +622,39 @@
       <article class="card span-6">
         <div class="card-header">
           <div>
-            <h2 class="card-title">Recent wallet events</h2>
+            <h2 class="card-title">Snapshot integrity</h2>
             <p class="card-note">
-              Only non-secret operational metadata belongs here.
+              Browser accepts only the locked Scout Wallet Lab devnet schema.
             </p>
           </div>
-          <span class="status yellow">No feed</span>
+
+          <span class="status yellow" id="snapshot-status">
+            Waiting
+          </span>
         </div>
 
-        <div class="empty">
-          No wallet-engine event source is connected yet.
-          Signing secrets and message payloads will never be rendered here.
+        <div class="key-value">
+          <span class="key">Expected engine</span>
+          <span class="value">scout-wallet-lab</span>
+        </div>
+
+        <div class="key-value">
+          <span class="key">Expected cluster</span>
+          <span class="value">devnet</span>
+        </div>
+
+        <div class="key-value">
+          <span class="key">Signing material accepted</span>
+          <span class="value">Never</span>
+        </div>
+
+        <div class="key-value">
+          <span class="key">Unknown schema fields trusted</span>
+          <span class="value">No</span>
         </div>
       </article>
 
-      <article class="card span-12">
+      <article class="card">
         <div class="card-header">
           <div>
             <h2 class="card-title">Security boundary</h2>
@@ -601,6 +662,7 @@
               Browser and Vercel remain outside the signing trust boundary.
             </p>
           </div>
+
           <span class="status green">Locked</span>
         </div>
 
@@ -608,18 +670,22 @@
           <span class="key">Private key in frontend</span>
           <span class="value">Never</span>
         </div>
+
         <div class="key-value">
           <span class="key">Seed in frontend</span>
           <span class="value">Never</span>
         </div>
+
         <div class="key-value">
           <span class="key">Passphrase in frontend</span>
           <span class="value">Never</span>
         </div>
+
         <div class="key-value">
           <span class="key">Arbitrary RPC endpoint</span>
           <span class="value">Disabled</span>
         </div>
+
         <div class="key-value">
           <span class="key">Transaction submission</span>
           <span class="value">Not connected</span>
@@ -631,5 +697,263 @@
       Scout Wallet Lab · devnet safety surface · no production funds
     </footer>
   </main>
+
+  <script>
+    "use strict";
+
+    const SNAPSHOT_URL = "./wallet-observability.json";
+    const EXPECTED_ENGINE = "scout-wallet-lab";
+    const EXPECTED_CLUSTER = "devnet";
+
+    const bridgeStatus = document.getElementById("bridge-status");
+    const signerStatus = document.getElementById("signer-status");
+    const balanceStatus = document.getElementById("balance-status");
+    const snapshotStatus = document.getElementById("snapshot-status");
+    const transactionStatus = document.getElementById("transaction-status");
+    const clusterValue = document.getElementById("cluster-value");
+    const balanceValue = document.getElementById("balance-value");
+    const walletAddress = document.getElementById("wallet-address");
+    const reservedLamports = document.getElementById("reserved-lamports");
+    const capitalReserved = document.getElementById("capital-reserved");
+    const signaturePresent = document.getElementById("signature-present");
+    const transactionState = document.getElementById("transaction-state");
+    const lastValidHeight = document.getElementById("last-valid-height");
+    const retryAllowed = document.getElementById("retry-allowed");
+    const rebuildAllowed = document.getElementById("rebuild-allowed");
+    const refreshButton = document.getElementById("refresh-button");
+
+    function setStatus(element, label, tone) {
+      element.classList.remove("green", "yellow", "red");
+      element.classList.add(tone);
+      element.textContent = label;
+    }
+
+    function booleanLabel(value) {
+      return value ? "Yes" : "No";
+    }
+
+    function lamportsToSol(lamports) {
+      return (lamports / 1_000_000_000).toLocaleString(
+        undefined,
+        {
+          minimumFractionDigits: 0,
+          maximumFractionDigits: 9
+        }
+      );
+    }
+
+    function isNonNegativeInteger(value) {
+      return Number.isSafeInteger(value) && value >= 0;
+    }
+
+    function validateSigner(value) {
+      if (!value || typeof value !== "object") {
+        return false;
+      }
+
+      if (value.state !== "running" && value.state !== "locked") {
+        return false;
+      }
+
+      if (typeof value.signing_locked !== "boolean") {
+        return false;
+      }
+
+      return (
+        (value.state === "locked" && value.signing_locked) ||
+        (value.state === "running" && !value.signing_locked)
+      );
+    }
+
+    function validateTransaction(value) {
+      if (value === null) {
+        return true;
+      }
+
+      if (!value || typeof value !== "object") {
+        return false;
+      }
+
+      const allowedStates = new Set([
+        "reserved",
+        "signed",
+        "submitted",
+        "confirmed",
+        "failed",
+        "ambiguous",
+        "quarantined",
+        "settled",
+        "released"
+      ]);
+
+      return (
+        allowedStates.has(value.state) &&
+        isNonNegativeInteger(value.reserved_lamports) &&
+        isNonNegativeInteger(value.last_valid_block_height) &&
+        typeof value.signature_present === "boolean" &&
+        typeof value.capital_reserved === "boolean" &&
+        typeof value.retry_delivery_allowed_at_last_valid_height === "boolean" &&
+        typeof value.rebuild_economic_intent_allowed === "boolean"
+      );
+    }
+
+    function validateSnapshot(snapshot) {
+      if (!snapshot || typeof snapshot !== "object") {
+        return false;
+      }
+
+      if (snapshot.engine !== EXPECTED_ENGINE) {
+        return false;
+      }
+
+      if (snapshot.cluster !== EXPECTED_CLUSTER) {
+        return false;
+      }
+
+      if (typeof snapshot.address !== "string" || snapshot.address.length === 0) {
+        return false;
+      }
+
+      if (
+        snapshot.lamports !== null &&
+        !isNonNegativeInteger(snapshot.lamports)
+      ) {
+        return false;
+      }
+
+      if (!validateSigner(snapshot.signer)) {
+        return false;
+      }
+
+      return validateTransaction(snapshot.transaction);
+    }
+
+    function renderSigner(signer) {
+      if (signer.state === "locked") {
+        setStatus(signerStatus, "Locked", "red");
+        return;
+      }
+
+      setStatus(signerStatus, "Running", "green");
+    }
+
+    function renderBalance(snapshot) {
+      clusterValue.textContent = snapshot.cluster;
+      walletAddress.textContent = snapshot.address;
+
+      if (snapshot.lamports === null) {
+        balanceValue.textContent = "—";
+        setStatus(balanceStatus, "Unknown", "yellow");
+        return;
+      }
+
+      balanceValue.textContent = lamportsToSol(snapshot.lamports);
+      setStatus(balanceStatus, "Observed", "green");
+    }
+
+    function renderTransaction(transaction) {
+      if (transaction === null) {
+        reservedLamports.textContent = "0";
+        capitalReserved.textContent = "No";
+        signaturePresent.textContent = "No";
+        transactionState.textContent = "—";
+        lastValidHeight.textContent = "—";
+        retryAllowed.textContent = "—";
+        rebuildAllowed.textContent = "—";
+        setStatus(transactionStatus, "No transaction", "green");
+        return;
+      }
+
+      reservedLamports.textContent =
+        transaction.reserved_lamports.toLocaleString();
+
+      capitalReserved.textContent =
+        booleanLabel(transaction.capital_reserved);
+
+      signaturePresent.textContent =
+        booleanLabel(transaction.signature_present);
+
+      transactionState.textContent = transaction.state;
+
+      lastValidHeight.textContent =
+        transaction.last_valid_block_height.toLocaleString();
+
+      retryAllowed.textContent =
+        booleanLabel(
+          transaction.retry_delivery_allowed_at_last_valid_height
+        );
+
+      rebuildAllowed.textContent =
+        booleanLabel(
+          transaction.rebuild_economic_intent_allowed
+        );
+
+      if (
+        transaction.state === "ambiguous" ||
+        transaction.state === "quarantined"
+      ) {
+        setStatus(transactionStatus, transaction.state, "red");
+        return;
+      }
+
+      setStatus(transactionStatus, transaction.state, "green");
+    }
+
+    function renderSnapshot(snapshot) {
+      renderSigner(snapshot.signer);
+      renderBalance(snapshot);
+      renderTransaction(snapshot.transaction);
+
+      bridgeStatus.textContent = "Safe snapshot connected";
+      setStatus(snapshotStatus, "Validated", "green");
+    }
+
+    function renderDisconnected(message) {
+      bridgeStatus.textContent = message;
+      setStatus(snapshotStatus, "Disconnected", "yellow");
+    }
+
+    function renderRejected() {
+      bridgeStatus.textContent = "Snapshot rejected";
+      setStatus(snapshotStatus, "Rejected", "red");
+    }
+
+    async function loadSnapshot() {
+      refreshButton.disabled = true;
+      bridgeStatus.textContent = "Checking safe snapshot";
+
+      try {
+        const response = await fetch(
+          `${SNAPSHOT_URL}?t=${Date.now()}`,
+          {
+            cache: "no-store",
+            credentials: "same-origin"
+          }
+        );
+
+        if (!response.ok) {
+          renderDisconnected("Engine snapshot not published yet");
+          return;
+        }
+
+        const snapshot = await response.json();
+
+        if (!validateSnapshot(snapshot)) {
+          renderRejected();
+          return;
+        }
+
+        renderSnapshot(snapshot);
+      } catch {
+        renderDisconnected("Engine snapshot not published yet");
+      } finally {
+        refreshButton.disabled = false;
+      }
+    }
+
+    refreshButton.addEventListener("click", loadSnapshot);
+
+    loadSnapshot();
+  </script>
 </body>
 </html>
