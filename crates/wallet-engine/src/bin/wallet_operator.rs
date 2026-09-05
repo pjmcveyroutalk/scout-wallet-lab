@@ -4,14 +4,19 @@ use std::{
     fs::{self, OpenOptions},
     io::{self, Write},
     path::{Path, PathBuf},
+    time::Duration,
 };
 
 #[cfg(unix)]
 use std::os::unix::fs::OpenOptionsExt;
 
-use wallet_engine::{LockedVault, SecretPassphrase};
+use rustls::crypto::CryptoProvider;
+use serde_json::{json, Value};
+use wallet_engine::{DevnetAccount, LockedVault, SecretPassphrase};
 
 const DEFAULT_VAULT_PATH: &str = "vault-data/execution-vault.json";
+const RPC_TIMEOUT_SECONDS: u64 = 10;
+const RPC_REQUEST_ID: u64 = 1;
 
 fn main() -> Result<(), Box<dyn Error>> {
     let mut arguments = env::args();
@@ -31,6 +36,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         "generate" => generate_wallet(&vault_path),
         "address" => print_address(&vault_path),
         "verify" => verify_wallet(&vault_path),
+        "balance" => print_balance(&vault_path),
         _ => Err(usage().into()),
     }
 }
@@ -97,6 +103,107 @@ fn verify_wallet(path: &Path) -> Result<(), Box<dyn Error>> {
     println!("Transaction submission: disabled");
 
     Ok(())
+}
+
+fn print_balance(path: &Path) -> Result<(), Box<dyn Error>> {
+    let vault = load_vault(path)?;
+    let passphrase = read_existing_passphrase()?;
+    let verified_address = verify_vault_identity(&vault, &passphrase)?;
+    let mut account = vault.devnet_account()?;
+
+    if account.address().to_string() != verified_address {
+        return Err("verified wallet address does not match Devnet account identity".into());
+    }
+
+    let lamports = query_devnet_balance(&mut account)?;
+
+    if account.lamports() != Some(lamports) {
+        return Err("Devnet balance observation was not recorded on the verified account".into());
+    }
+
+    println!("Scout Wallet Lab Devnet balance verified.");
+    println!("Cluster: {}", account.cluster().rpc_name());
+    println!("Address: {verified_address}");
+    println!("Balance (lamports): {lamports}");
+    println!("Balance state: confirmed RPC observation");
+    println!("Identity verification: locked and unlocked identities match");
+    println!("Mainnet: disabled");
+    println!("Transaction submission: disabled");
+
+    Ok(())
+}
+
+fn query_devnet_balance(account: &mut DevnetAccount) -> Result<u64, Box<dyn Error>> {
+    ensure_tls_provider()?;
+    account.clear_balance();
+
+    let client = reqwest::blocking::Client::builder()
+        .timeout(Duration::from_secs(RPC_TIMEOUT_SECONDS))
+        .build()
+        .map_err(|_| io::Error::other("Devnet RPC client initialization failed"))?;
+
+    let request = build_balance_request(account);
+    let response = client
+        .post(account.cluster().rpc_url())
+        .json(&request)
+        .send()
+        .map_err(|_| io::Error::other("Devnet RPC transport failed"))?;
+
+    if !response.status().is_success() {
+        return Err(io::Error::other("Devnet RPC HTTP status rejected").into());
+    }
+
+    let response = response
+        .json::<Value>()
+        .map_err(|_| io::Error::other("Devnet RPC response was invalid"))?;
+    let lamports = parse_balance_response(&response).map_err(io::Error::other)?;
+
+    account.record_balance(lamports);
+    Ok(lamports)
+}
+
+fn ensure_tls_provider() -> Result<(), Box<dyn Error>> {
+    if CryptoProvider::get_default().is_some() {
+        return Ok(());
+    }
+
+    if rustls::crypto::ring::default_provider()
+        .install_default()
+        .is_err()
+    {
+        return Err(io::Error::other("Devnet RPC TLS initialization failed").into());
+    }
+
+    Ok(())
+}
+
+fn build_balance_request(account: &DevnetAccount) -> Value {
+    json!({
+        "jsonrpc": "2.0",
+        "id": RPC_REQUEST_ID,
+        "method": "getBalance",
+        "params": [
+            account.address().to_string(),
+            {
+                "commitment": "confirmed"
+            }
+        ]
+    })
+}
+
+fn parse_balance_response(response: &Value) -> Result<u64, &'static str> {
+    if response
+        .get("error")
+        .is_some_and(|error| !error.is_null())
+    {
+        return Err("Devnet RPC request was rejected");
+    }
+
+    response
+        .get("result")
+        .and_then(|result| result.get("value"))
+        .and_then(Value::as_u64)
+        .ok_or("Devnet RPC response was invalid")
 }
 
 fn verify_vault_identity(
@@ -188,7 +295,7 @@ fn write_new_vault(path: &Path, encoded: &str) -> Result<(), Box<dyn Error>> {
 
 fn usage() -> String {
     format!(
-        "usage: wallet_operator <generate|address|verify> [vault-path]\n\
+        "usage: wallet_operator <generate|address|verify|balance> [vault-path]\n\
          default vault path: {DEFAULT_VAULT_PATH}"
     )
 }
@@ -201,8 +308,12 @@ mod tests {
         time::{SystemTime, UNIX_EPOCH},
     };
 
-    use super::{load_vault, verify_vault_identity, write_new_vault};
-    use wallet_engine::{LockedVault, SecretPassphrase, SecretSeed};
+    use super::{
+        build_balance_request, load_vault, parse_balance_response, verify_vault_identity,
+        write_new_vault, RPC_REQUEST_ID,
+    };
+    use serde_json::json;
+    use wallet_engine::{DevnetAccount, LockedVault, SecretPassphrase, SecretSeed};
 
     fn unique_test_path() -> Result<PathBuf, Box<dyn std::error::Error>> {
         let nonce = SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos();
@@ -271,6 +382,78 @@ mod tests {
         let vault = LockedVault::import_seed(&correct, SecretSeed::new([213_u8; 32]))?;
 
         assert!(verify_vault_identity(&vault, &wrong).is_err());
+
+        Ok(())
+    }
+
+    #[test]
+    fn balance_request_is_pinned_to_verified_account() -> Result<(), Box<dyn std::error::Error>> {
+        let passphrase = SecretPassphrase::new("balance request test".to_owned());
+        let vault = LockedVault::import_seed(&passphrase, SecretSeed::new([214_u8; 32]))?;
+        let account = vault.devnet_account()?;
+        let request = build_balance_request(&account);
+
+        assert_eq!(request["jsonrpc"], "2.0");
+        assert_eq!(request["id"], RPC_REQUEST_ID);
+        assert_eq!(request["method"], "getBalance");
+        assert_eq!(request["params"][0], account.address().to_string());
+        assert_eq!(request["params"][1]["commitment"], "confirmed");
+
+        Ok(())
+    }
+
+    #[test]
+    fn balance_response_records_only_unsigned_lamports() {
+        let response = json!({
+            "jsonrpc": "2.0",
+            "result": {
+                "context": {
+                    "slot": 1
+                },
+                "value": 123_456_u64
+            },
+            "id": RPC_REQUEST_ID
+        });
+
+        assert_eq!(parse_balance_response(&response), Ok(123_456));
+    }
+
+    #[test]
+    fn balance_response_rejects_rpc_error() {
+        let response = json!({
+            "jsonrpc": "2.0",
+            "error": {
+                "code": -32_000,
+                "message": "rejected"
+            },
+            "id": RPC_REQUEST_ID
+        });
+
+        assert!(parse_balance_response(&response).is_err());
+    }
+
+    #[test]
+    fn balance_response_rejects_missing_value() {
+        let response = json!({
+            "jsonrpc": "2.0",
+            "result": {
+                "context": {
+                    "slot": 1
+                }
+            },
+            "id": RPC_REQUEST_ID
+        });
+
+        assert!(parse_balance_response(&response).is_err());
+    }
+
+    #[test]
+    fn new_devnet_account_starts_without_balance() -> Result<(), Box<dyn std::error::Error>> {
+        let passphrase = SecretPassphrase::new("empty balance state test".to_owned());
+        let vault = LockedVault::import_seed(&passphrase, SecretSeed::new([215_u8; 32]))?;
+        let account = DevnetAccount::new(vault.devnet_account()?.address());
+
+        assert_eq!(account.lamports(), None);
 
         Ok(())
     }
