@@ -1,5 +1,7 @@
 #![forbid(unsafe_code)]
 
+pub mod observability;
+
 use argon2::{Algorithm, Argon2, Params, Version};
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
 use chacha20poly1305::{
