@@ -12,6 +12,10 @@ base64ct = "=1.6.0"
 chacha20poly1305 = "=0.10.1"
 ed25519-dalek = { version = "=2.1.1", features = ["zeroize"] }
 getrandom = "=0.2.15"
+hyper-rustls = { version = "=0.27.7", default-features = false, features = ["http1", "tls12", "webpki-tokio"] }
+idna_adapter = "=1.1.0"
+reqwest = { version = "=0.12.18", default-features = false, features = ["json", "rustls-tls-webpki-roots-no-provider"] }
+rustls = { version = "=0.23.43", default-features = false, features = ["ring", "std", "tls12"] }
 serde = { version = "=1.0.217", features = ["derive"] }
 serde_json = "=1.0.137"
 solana-pubkey = { version = "=2.2.1", default-features = false, features = ["curve25519", "std"] }
