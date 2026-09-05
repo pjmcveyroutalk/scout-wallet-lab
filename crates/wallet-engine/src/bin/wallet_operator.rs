@@ -8,10 +8,7 @@ use std::{
 };
 
 #[cfg(unix)]
-use std::{
-    os::unix::fs::OpenOptionsExt,
-    process::Command,
-};
+use std::{os::unix::fs::OpenOptionsExt, process::Command};
 
 use rustls::crypto::CryptoProvider;
 use serde_json::{json, Value};
