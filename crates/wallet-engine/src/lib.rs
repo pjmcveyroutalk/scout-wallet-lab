@@ -678,10 +678,7 @@ pub struct TransactionLedgerEntry {
 }
 
 impl TransactionLedgerEntry {
-    pub fn reserve(
-        reserved_lamports: u64,
-        lease: BlockhashLease,
-    ) -> Result<Self, LedgerError> {
+    pub fn reserve(reserved_lamports: u64, lease: BlockhashLease) -> Result<Self, LedgerError> {
         if reserved_lamports == 0 {
             return Err(LedgerError::ZeroReservation);
         }
@@ -1090,11 +1087,7 @@ mod tests {
         last_valid_block_height: u64,
         observed_block_height: u64,
     ) -> BlockhashLease {
-        BlockhashLease::new_for_test(
-            blockhash,
-            last_valid_block_height,
-            observed_block_height,
-        )
+        BlockhashLease::new_for_test(blockhash, last_valid_block_height, observed_block_height)
     }
 
     #[test]
