@@ -10,4 +10,8 @@ internal object NativeBridge {
     external fun engineName(): String
 
     external fun bridgeStatus(): String
+
+    external fun rpcCluster(): String
+
+    external fun rpcEndpoint(): String
 }
