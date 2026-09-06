@@ -92,8 +92,7 @@ pub fn fetch_locked_vault_devnet_history(
         return Err(HistoryError::EmptyVaultJson);
     }
 
-    let vault =
-        LockedVault::from_json(vault_json).map_err(|_| HistoryError::VaultParseFailed)?;
+    let vault = LockedVault::from_json(vault_json).map_err(|_| HistoryError::VaultParseFailed)?;
 
     let account = vault
         .devnet_account()
@@ -102,9 +101,7 @@ pub fn fetch_locked_vault_devnet_history(
     fetch_devnet_history(account.address())
 }
 
-fn fetch_devnet_history(
-    address: Pubkey,
-) -> Result<Vec<DevnetSignatureRecord>, HistoryError> {
+fn fetch_devnet_history(address: Pubkey) -> Result<Vec<DevnetSignatureRecord>, HistoryError> {
     let client = Client::builder()
         .timeout(Duration::from_secs(RPC_TIMEOUT_SECONDS))
         .build()
@@ -129,9 +126,7 @@ fn fetch_devnet_history(
     parse_history_response(response)
 }
 
-fn build_get_signatures_for_address_request(
-    address: Pubkey,
-) -> GetSignaturesForAddressRequest {
+fn build_get_signatures_for_address_request(address: Pubkey) -> GetSignaturesForAddressRequest {
     GetSignaturesForAddressRequest {
         jsonrpc: "2.0",
         id: RPC_REQUEST_ID,
@@ -221,16 +216,13 @@ mod tests {
 
         let result = parse_history_response(response);
 
-        let records = match result {
-            Ok(records) => records,
-            Err(error) => {
-                panic!("unexpected history parsing failure: {error}");
-            }
-        };
-
-        assert_eq!(records.len(), 1);
-        assert_eq!(records[0].signature(), "test-signature");
-        assert_eq!(records[0].slot(), 123_456);
+        assert_eq!(
+            result,
+            Ok(vec![DevnetSignatureRecord {
+                signature: "test-signature".to_owned(),
+                slot: 123_456,
+            }]),
+        );
     }
 
     #[test]
