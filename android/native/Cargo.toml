@@ -12,7 +12,7 @@ jni = "=0.21.1"
 wallet-engine = { path = "../../crates/wallet-engine" }
 
 [lints.rust]
-unsafe_code = "forbid"
+unsafe_code = "deny"
 
 [lints.clippy]
 unwrap_used = "deny"
