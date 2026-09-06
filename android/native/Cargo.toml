@@ -9,6 +9,10 @@ crate-type = ["cdylib"]
 
 [dependencies]
 jni = "=0.21.1"
+reqwest = { version = "=0.12.18", default-features = false, features = ["json", "rustls-tls-webpki-roots-no-provider"] }
+rustls = { version = "=0.23.43", default-features = false, features = ["ring", "std", "tls12"] }
+serde = { version = "=1.0.217", features = ["derive"] }
+serde_json = "=1.0.137"
 tokio = { version = "=1.53.1", features = ["rt"] }
 wallet-engine = { path = "../../crates/wallet-engine" }
 zeroize = "=1.8.1"
