@@ -20,4 +20,6 @@ internal object NativeBridge {
     external fun createLockedDevnetVault(passphraseBytes: ByteArray): String
 
     external fun lockedVaultDevnetAddress(vaultJson: String): String
+
+    external fun lockedVaultDevnetBalance(vaultJson: String): String
 }
