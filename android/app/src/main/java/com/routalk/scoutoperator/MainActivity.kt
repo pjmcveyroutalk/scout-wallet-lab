@@ -608,4 +608,155 @@ class MainActivity : Activity() {
 
         if (vaultStore.hasVault()) {
             return WalletCreationResult(
-                su
+                success = false,
+                address = null,
+                status =
+                    "WALLET CREATION BLOCKED — VAULT STORAGE ALREADY OCCUPIED",
+                retryAllowed = false,
+            )
+        }
+
+        val nativeResult =
+            NativeBridge.createLockedDevnetVault(
+                passphraseBytes,
+            )
+
+        if (!nativeResult.startsWith("ok:")) {
+            return WalletCreationResult(
+                success = false,
+                address = null,
+                status =
+                    "WALLET CREATION FAILED — $nativeResult",
+                retryAllowed = true,
+            )
+        }
+
+        val resultParts =
+            nativeResult.split(
+                ":",
+                limit = 3,
+            )
+
+        if (
+            resultParts.size != 3 ||
+            resultParts[0] != "ok"
+        ) {
+            return WalletCreationResult(
+                success = false,
+                address = null,
+                status =
+                    "WALLET CREATION FAILED — INVALID NATIVE RESPONSE",
+                retryAllowed = true,
+            )
+        }
+
+        val generatedAddress =
+            resultParts[1]
+
+        val lockedVaultJson =
+            resultParts[2]
+
+        if (
+            generatedAddress.isBlank() ||
+            lockedVaultJson.isBlank()
+        ) {
+            return WalletCreationResult(
+                success = false,
+                address = null,
+                status =
+                    "WALLET CREATION FAILED — INCOMPLETE NATIVE RESPONSE",
+                retryAllowed = true,
+            )
+        }
+
+        if (!vaultStore.saveVault(lockedVaultJson)) {
+            return WalletCreationResult(
+                success = false,
+                address = null,
+                status =
+                    "WALLET CREATION FAILED — ENCRYPTED VAULT NOT STORED",
+                retryAllowed = true,
+            )
+        }
+
+        val storedVaultJson =
+            vaultStore.loadVault()
+
+        if (storedVaultJson == null) {
+            return failureAfterStoredVault(
+                vaultStore = vaultStore,
+                status =
+                    "WALLET CREATION FAILED — STORED VAULT NOT READABLE",
+            )
+        }
+
+        val verificationResult =
+            NativeBridge.lockedVaultDevnetAddress(
+                storedVaultJson,
+            )
+
+        if (!verificationResult.startsWith("ok:")) {
+            return failureAfterStoredVault(
+                vaultStore = vaultStore,
+                status =
+                    "WALLET CREATION FAILED — STORED VAULT IDENTITY NOT VERIFIED",
+            )
+        }
+
+        val verifiedAddress =
+            verificationResult.removePrefix("ok:")
+
+        if (
+            verifiedAddress.isBlank() ||
+            verifiedAddress != generatedAddress
+        ) {
+            return failureAfterStoredVault(
+                vaultStore = vaultStore,
+                status =
+                    "WALLET CREATION FAILED — ADDRESS VERIFICATION MISMATCH",
+            )
+        }
+
+        return WalletCreationResult(
+            success = true,
+            address = verifiedAddress,
+            status =
+                "VERIFIED — ENCRYPTED DEVNET WALLET CREATED AND RELOADED",
+            retryAllowed = false,
+        )
+    }
+
+    private fun failureAfterStoredVault(
+        vaultStore: LockedVaultStore,
+        status: String,
+    ): WalletCreationResult {
+        val cleared =
+            try {
+                vaultStore.clearVault()
+            } catch (_: Throwable) {
+                false
+            }
+
+        return if (cleared) {
+            WalletCreationResult(
+                success = false,
+                address = null,
+                status = status,
+                retryAllowed = true,
+            )
+        } else {
+            WalletCreationResult(
+                success = false,
+                address = null,
+                status =
+                    "$status — VAULT CLEANUP FAILED",
+                retryAllowed = false,
+            )
+        }
+    }
+
+    private fun clearSensitiveFields() {
+        passphraseField?.text?.clear()
+        confirmationField?.text?.clear()
+    }
+}
