@@ -43,6 +43,13 @@ class MainActivity : Activity() {
         val status: String,
     )
 
+    private data class WalletCreationResult(
+        val success: Boolean,
+        val address: String?,
+        val status: String,
+        val retryAllowed: Boolean,
+    )
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -63,6 +70,7 @@ class MainActivity : Activity() {
         ): EditText =
             EditText(this).apply {
                 hint = hintText
+
                 inputType =
                     InputType.TYPE_CLASS_TEXT or
                         InputType.TYPE_TEXT_VARIATION_PASSWORD or
@@ -242,6 +250,7 @@ class MainActivity : Activity() {
 
         val checkDevnet = Button(this).apply {
             text = "CHECK DEVNET"
+
             isEnabled =
                 bridgeRuntimeState.bridgeVerified &&
                     bridgeRuntimeState.rpcVerified
@@ -265,10 +274,13 @@ class MainActivity : Activity() {
                 runOnUiThread {
                     if (result.startsWith("ok:")) {
                         val blockHeight = result.removePrefix("ok:")
+
                         networkStatus.text =
-                            "VERIFIED — DEVNET LIVE\nBlock height: $blockHeight"
+                            "VERIFIED — DEVNET LIVE\n" +
+                                "Block height: $blockHeight"
                     } else {
-                        networkStatus.text = "DEVNET CHECK FAILED\n$result"
+                        networkStatus.text =
+                            "DEVNET CHECK FAILED\n$result"
                     }
 
                     checkDevnet.isEnabled =
@@ -287,7 +299,8 @@ class MainActivity : Activity() {
         )
 
         root.addView(text("Wallet storage", 14f))
-        root.addView(
+
+        val storageStatus =
             text(
                 when {
                     vaultStorageState.hasReadableVault ->
@@ -300,11 +313,13 @@ class MainActivity : Activity() {
                         "NO ENCRYPTED VAULT STORED"
                 },
                 16f,
-            ),
-        )
+            )
+
+        root.addView(storageStatus)
 
         root.addView(text("Wallet", 14f))
-        root.addView(
+
+        val walletStatus =
             text(
                 if (vaultIdentityState.verified) {
                     "Locked encrypted vault detected"
@@ -312,8 +327,9 @@ class MainActivity : Activity() {
                     "Not initialized"
                 },
                 18f,
-            ),
-        )
+            )
+
+        root.addView(walletStatus)
 
         root.addView(text("Wallet passphrase", 14f))
 
@@ -351,18 +367,36 @@ class MainActivity : Activity() {
             ),
         )
 
-        root.addView(
+        val creationStatus =
             text(
-                "Passphrase entry staged — wallet creation remains locked.",
+                when {
+                    vaultStorageState.hasStoredEntry ->
+                        "Wallet creation locked — vault storage already occupied."
+
+                    !bridgeRuntimeState.bridgeVerified ->
+                        "Wallet creation locked — Rust bridge not verified."
+
+                    !bridgeRuntimeState.rpcVerified ->
+                        "Wallet creation locked — Devnet RPC configuration not verified."
+
+                    else ->
+                        "READY — encrypted Devnet wallet creation gate open."
+                },
                 14f,
-            ),
-        )
+            )
+
+        root.addView(creationStatus)
 
         val createWallet = Button(this).apply {
             text = "CREATE WALLET"
-            isEnabled = false
+
+            isEnabled =
+                bridgeRuntimeState.bridgeVerified &&
+                    bridgeRuntimeState.rpcVerified &&
+                    !vaultStorageState.hasStoredEntry
+
             contentDescription =
-                "Create wallet unavailable until wallet activation gate is explicitly opened"
+                "Create encrypted Scout Devnet wallet"
         }
 
         root.addView(
@@ -374,15 +408,24 @@ class MainActivity : Activity() {
         )
 
         root.addView(text("Address", 14f))
-        root.addView(
+
+        val addressStatus =
             text(
                 vaultIdentityState.address ?: "Unavailable",
                 16f,
-            ),
-        )
+            )
+
+        root.addView(addressStatus)
 
         root.addView(text("Identity", 14f))
-        root.addView(text(vaultIdentityState.status, 16f))
+
+        val identityStatus =
+            text(
+                vaultIdentityState.status,
+                16f,
+            )
+
+        root.addView(identityStatus)
 
         root.addView(text("Balance", 14f))
         root.addView(text("Unavailable", 16f))
@@ -391,6 +434,7 @@ class MainActivity : Activity() {
             text = "REFRESH BALANCE"
             isEnabled = false
             inputType = InputType.TYPE_NULL
+
             contentDescription =
                 "Balance unavailable until read-only wallet access is explicitly opened"
         }
@@ -417,6 +461,129 @@ class MainActivity : Activity() {
         }
 
         setContentView(scrollView)
+
+        if (vaultIdentityState.verified) {
+            passphrase.isEnabled = false
+            confirmation.isEnabled = false
+            createWallet.isEnabled = false
+        }
+
+        createWallet.setOnClickListener {
+            val currentPassphrase =
+                passphraseField?.text
+
+            val currentConfirmation =
+                confirmationField?.text
+
+            if (
+                currentPassphrase == null ||
+                currentConfirmation == null
+            ) {
+                creationStatus.text =
+                    "WALLET CREATION BLOCKED — PASSPHRASE INPUT UNAVAILABLE"
+
+                clearSensitiveFields()
+                return@setOnClickListener
+            }
+
+            when (
+                val validation =
+                    PassphrasePolicy.validateAndEncode(
+                        currentPassphrase,
+                        currentConfirmation,
+                    )
+            ) {
+                is PassphrasePolicy.ValidationResult.Invalid -> {
+                    creationStatus.text =
+                        "WALLET CREATION BLOCKED — ${validation.reason}"
+
+                    clearSensitiveFields()
+                }
+
+                is PassphrasePolicy.ValidationResult.Valid -> {
+                    val passphraseBytes =
+                        validation.passphraseBytes
+
+                    clearSensitiveFields()
+
+                    createWallet.isEnabled = false
+                    passphrase.isEnabled = false
+                    confirmation.isEnabled = false
+
+                    creationStatus.text =
+                        "CREATING ENCRYPTED DEVNET VAULT..."
+
+                    Thread {
+                        val creationResult =
+                            try {
+                                createAndVerifyWallet(
+                                    passphraseBytes,
+                                )
+                            } catch (error: Throwable) {
+                                val storedEntryPresent =
+                                    try {
+                                        LockedVaultStore(this).hasVault()
+                                    } catch (_: Throwable) {
+                                        true
+                                    }
+
+                                WalletCreationResult(
+                                    success = false,
+                                    address = null,
+                                    status =
+                                        "WALLET CREATION FAILED — " +
+                                            error.javaClass.simpleName,
+                                    retryAllowed =
+                                        !storedEntryPresent,
+                                )
+                            } finally {
+                                PassphrasePolicy.wipe(
+                                    passphraseBytes,
+                                )
+                            }
+
+                        runOnUiThread {
+                            clearSensitiveFields()
+
+                            if (creationResult.success) {
+                                storageStatus.text =
+                                    "VERIFIED — ENCRYPTED VAULT STORED"
+
+                                walletStatus.text =
+                                    "Locked encrypted vault detected"
+
+                                addressStatus.text =
+                                    creationResult.address ?: "Unavailable"
+
+                                identityStatus.text =
+                                    "VERIFIED — DEVNET PUBLIC IDENTITY"
+
+                                creationStatus.text =
+                                    creationResult.status
+
+                                createWallet.isEnabled = false
+                                passphrase.isEnabled = false
+                                confirmation.isEnabled = false
+                            } else {
+                                creationStatus.text =
+                                    creationResult.status
+
+                                createWallet.isEnabled =
+                                    creationResult.retryAllowed &&
+                                        bridgeRuntimeState.bridgeVerified &&
+                                        bridgeRuntimeState.rpcVerified
+
+                                passphrase.isEnabled =
+                                    creationResult.retryAllowed
+
+                                confirmation.isEnabled =
+                                    creationResult.retryAllowed
+                            }
+                        }
+                    }.start()
+                }
+            }
+        }
     }
 
     override fun onStop() {
@@ -426,13 +593,19 @@ class MainActivity : Activity() {
 
     override fun onDestroy() {
         clearSensitiveFields()
+
         passphraseField = null
         confirmationField = null
+
         super.onDestroy()
     }
 
-    private fun clearSensitiveFields() {
-        passphraseField?.text?.clear()
-        confirmationField?.text?.clear()
-    }
-}
+    private fun createAndVerifyWallet(
+        passphraseBytes: ByteArray,
+    ): WalletCreationResult {
+        val vaultStore =
+            LockedVaultStore(this)
+
+        if (vaultStore.hasVault()) {
+            return WalletCreationResult(
+                su
