@@ -30,14 +30,53 @@ class MainActivity : Activity() {
 
         root.addView(text("SCOUT WALLET OPERATOR", 24f))
         root.addView(text("DEVNET", 16f))
+
+        root.addView(text("Rust bridge", 14f))
+
+        val bridgeIdentity: String
+        val bridgeStatus: String
+        val bridgeVerified: Boolean
+
+        try {
+            bridgeIdentity = NativeBridge.engineName()
+            bridgeStatus = NativeBridge.bridgeStatus()
+            bridgeVerified =
+                bridgeIdentity.isNotBlank() &&
+                    bridgeIdentity.endsWith(":devnet") &&
+                    bridgeStatus == "wallet-operations-locked"
+        } catch (error: Throwable) {
+            bridgeIdentity = "Unavailable: ${error.javaClass.simpleName}"
+            bridgeStatus = "bridge-load-failed"
+            bridgeVerified = false
+        }
+
+        root.addView(text(bridgeIdentity, 16f))
+
+        root.addView(text("Bridge status", 14f))
+        root.addView(text(bridgeStatus, 16f))
+
+        root.addView(text("Runtime verification", 14f))
+        root.addView(
+            text(
+                if (bridgeVerified) {
+                    "VERIFIED — RUST BRIDGE LOADED"
+                } else {
+                    "NOT VERIFIED"
+                },
+                16f,
+            ),
+        )
+
         root.addView(text("Wallet", 14f))
         root.addView(text("Not initialized", 18f))
 
         val createWallet = Button(this).apply {
             text = "CREATE WALLET"
             isEnabled = false
-            contentDescription = "Create wallet unavailable until Rust bridge is verified"
+            contentDescription =
+                "Create wallet unavailable until wallet activation gate is explicitly opened"
         }
+
         root.addView(
             createWallet,
             ViewGroup.LayoutParams(
@@ -48,8 +87,10 @@ class MainActivity : Activity() {
 
         root.addView(text("Address", 14f))
         root.addView(text("Unavailable", 16f))
+
         root.addView(text("Identity", 14f))
         root.addView(text("Not verified", 16f))
+
         root.addView(text("Balance", 14f))
         root.addView(text("Unavailable", 16f))
 
@@ -57,8 +98,10 @@ class MainActivity : Activity() {
             text = "REFRESH BALANCE"
             isEnabled = false
             inputType = InputType.TYPE_NULL
-            contentDescription = "Balance unavailable until Rust bridge is verified"
+            contentDescription =
+                "Balance unavailable until read-only wallet access is explicitly opened"
         }
+
         root.addView(
             refreshBalance,
             ViewGroup.LayoutParams(
