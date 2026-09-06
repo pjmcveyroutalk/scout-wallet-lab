@@ -108,6 +108,57 @@ class MainActivity : Activity() {
             ),
         )
 
+        root.addView(text("Devnet network", 14f))
+
+        val networkStatus = text("NOT CHECKED", 16f)
+        root.addView(networkStatus)
+
+        val checkDevnet = Button(this).apply {
+            text = "CHECK DEVNET"
+            isEnabled =
+                bridgeRuntimeState.bridgeVerified &&
+                    bridgeRuntimeState.rpcVerified
+
+            contentDescription =
+                "Perform read-only Solana Devnet network health check"
+        }
+
+        checkDevnet.setOnClickListener {
+            checkDevnet.isEnabled = false
+            networkStatus.text = "CHECKING DEVNET..."
+
+            Thread {
+                val result =
+                    try {
+                        NativeBridge.devnetBlockHeight()
+                    } catch (error: Throwable) {
+                        "bridge-call-failed:${error.javaClass.simpleName}"
+                    }
+
+                runOnUiThread {
+                    if (result.startsWith("ok:")) {
+                        val blockHeight = result.removePrefix("ok:")
+                        networkStatus.text =
+                            "VERIFIED — DEVNET LIVE\nBlock height: $blockHeight"
+                    } else {
+                        networkStatus.text = "DEVNET CHECK FAILED\n$result"
+                    }
+
+                    checkDevnet.isEnabled =
+                        bridgeRuntimeState.bridgeVerified &&
+                            bridgeRuntimeState.rpcVerified
+                }
+            }.start()
+        }
+
+        root.addView(
+            checkDevnet,
+            ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+            ),
+        )
+
         root.addView(text("Wallet", 14f))
         root.addView(text("Not initialized", 18f))
 
