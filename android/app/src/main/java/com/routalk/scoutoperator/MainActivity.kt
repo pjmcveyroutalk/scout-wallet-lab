@@ -1,16 +1,25 @@
 package com.routalk.scoutoperator
 
 import android.app.Activity
+import android.os.Build
 import android.os.Bundle
 import android.text.InputType
+import android.text.method.PasswordTransformationMethod
 import android.view.Gravity
+import android.view.View
 import android.view.ViewGroup
+import android.view.WindowManager
+import android.view.inputmethod.EditorInfo
 import android.widget.Button
+import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 
 class MainActivity : Activity() {
+    private var passphraseField: EditText? = null
+    private var confirmationField: EditText? = null
+
     private data class BridgeRuntimeState(
         val identity: String,
         val status: String,
@@ -37,6 +46,8 @@ class MainActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+
         val padding = (24 * resources.displayMetrics.density).toInt()
 
         fun text(value: String, size: Float): TextView =
@@ -44,6 +55,37 @@ class MainActivity : Activity() {
                 this.text = value
                 textSize = size
                 setPadding(0, padding / 2, 0, padding / 2)
+            }
+
+        fun securePassphraseField(
+            hintText: String,
+            description: String,
+        ): EditText =
+            EditText(this).apply {
+                hint = hintText
+                inputType =
+                    InputType.TYPE_CLASS_TEXT or
+                        InputType.TYPE_TEXT_VARIATION_PASSWORD or
+                        InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
+
+                transformationMethod =
+                    PasswordTransformationMethod.getInstance()
+
+                isSingleLine = true
+                maxLines = 1
+
+                contentDescription = description
+
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    importantForAutofill =
+                        View.IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS
+
+                    setAutofillHints(null)
+
+                    imeOptions =
+                        imeOptions or
+                            EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING
+                }
             }
 
         val root = LinearLayout(this).apply {
@@ -273,6 +315,49 @@ class MainActivity : Activity() {
             ),
         )
 
+        root.addView(text("Wallet passphrase", 14f))
+
+        val passphrase =
+            securePassphraseField(
+                hintText = "16–128 printable ASCII characters",
+                description = "Scout wallet passphrase",
+            )
+
+        passphraseField = passphrase
+
+        root.addView(
+            passphrase,
+            ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+            ),
+        )
+
+        root.addView(text("Confirm passphrase", 14f))
+
+        val confirmation =
+            securePassphraseField(
+                hintText = "Re-enter passphrase",
+                description = "Confirm Scout wallet passphrase",
+            )
+
+        confirmationField = confirmation
+
+        root.addView(
+            confirmation,
+            ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+            ),
+        )
+
+        root.addView(
+            text(
+                "Passphrase entry staged — wallet creation remains locked.",
+                14f,
+            ),
+        )
+
         val createWallet = Button(this).apply {
             text = "CREATE WALLET"
             isEnabled = false
@@ -332,5 +417,22 @@ class MainActivity : Activity() {
         }
 
         setContentView(scrollView)
+    }
+
+    override fun onStop() {
+        clearSensitiveFields()
+        super.onStop()
+    }
+
+    override fun onDestroy() {
+        clearSensitiveFields()
+        passphraseField = null
+        confirmationField = null
+        super.onDestroy()
+    }
+
+    private fun clearSensitiveFields() {
+        passphraseField?.text?.clear()
+        confirmationField?.text?.clear()
     }
 }
