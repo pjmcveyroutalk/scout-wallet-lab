@@ -28,6 +28,12 @@ class MainActivity : Activity() {
             get() = !lockedVaultJson.isNullOrBlank()
     }
 
+    private data class VaultIdentityState(
+        val verified: Boolean,
+        val address: String?,
+        val status: String,
+    )
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -89,6 +95,62 @@ class MainActivity : Activity() {
                 VaultStorageState(
                     hasStoredEntry = false,
                     lockedVaultJson = null,
+                )
+            }
+
+        val vaultIdentityState =
+            if (
+                bridgeRuntimeState.bridgeVerified &&
+                vaultStorageState.hasReadableVault
+            ) {
+                try {
+                    val result =
+                        NativeBridge.lockedVaultDevnetAddress(
+                            vaultStorageState.lockedVaultJson.orEmpty(),
+                        )
+
+                    if (result.startsWith("ok:")) {
+                        val address = result.removePrefix("ok:")
+
+                        if (address.isNotBlank()) {
+                            VaultIdentityState(
+                                verified = true,
+                                address = address,
+                                status = "VERIFIED — DEVNET PUBLIC IDENTITY",
+                            )
+                        } else {
+                            VaultIdentityState(
+                                verified = false,
+                                address = null,
+                                status = "NOT VERIFIED — EMPTY ADDRESS",
+                            )
+                        }
+                    } else {
+                        VaultIdentityState(
+                            verified = false,
+                            address = null,
+                            status = "NOT VERIFIED — $result",
+                        )
+                    }
+                } catch (error: Throwable) {
+                    VaultIdentityState(
+                        verified = false,
+                        address = null,
+                        status =
+                            "NOT VERIFIED — bridge-call-failed:" +
+                                error.javaClass.simpleName,
+                    )
+                }
+            } else {
+                VaultIdentityState(
+                    verified = false,
+                    address = null,
+                    status =
+                        if (vaultStorageState.hasReadableVault) {
+                            "NOT VERIFIED — RUST BRIDGE UNAVAILABLE"
+                        } else {
+                            "NOT VERIFIED — NO VAULT"
+                        },
                 )
             }
 
@@ -202,7 +264,7 @@ class MainActivity : Activity() {
         root.addView(text("Wallet", 14f))
         root.addView(
             text(
-                if (vaultStorageState.hasReadableVault) {
+                if (vaultIdentityState.verified) {
                     "Locked encrypted vault detected"
                 } else {
                     "Not initialized"
@@ -227,10 +289,15 @@ class MainActivity : Activity() {
         )
 
         root.addView(text("Address", 14f))
-        root.addView(text("Unavailable", 16f))
+        root.addView(
+            text(
+                vaultIdentityState.address ?: "Unavailable",
+                16f,
+            ),
+        )
 
         root.addView(text("Identity", 14f))
-        root.addView(text("Not verified", 16f))
+        root.addView(text(vaultIdentityState.status, 16f))
 
         root.addView(text("Balance", 14f))
         root.addView(text("Unavailable", 16f))
