@@ -1,0 +1,20 @@
+[package]
+name = "scout-operator-native"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.80"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+jni = "=0.21.1"
+wallet-engine = { path = "../../crates/wallet-engine" }
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[lints.clippy]
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
