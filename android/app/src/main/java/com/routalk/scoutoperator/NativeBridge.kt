@@ -16,4 +16,6 @@ internal object NativeBridge {
     external fun rpcEndpoint(): String
 
     external fun devnetBlockHeight(): String
+
+    external fun createLockedDevnetVault(passphrase: String): String
 }
