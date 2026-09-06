@@ -6,10 +6,12 @@ on:
       - main
     paths:
       - "android/**"
+      - "crates/wallet-engine/**"
       - ".github/workflows/android-build.yml"
   pull_request:
     paths:
       - "android/**"
+      - "crates/wallet-engine/**"
       - ".github/workflows/android-build.yml"
   workflow_dispatch:
 
@@ -39,6 +41,25 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "8.9"
+
+      - name: Install Rust 1.80 Android target
+        uses: dtolnay/rust-toolchain@1.80.0
+        with:
+          targets: aarch64-linux-android
+
+      - name: Build Rust Android bridge
+        working-directory: android/native
+        env:
+          CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER: ${{ env.ANDROID_NDK_ROOT }}/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android28-clang
+          CC_aarch64_linux_android: ${{ env.ANDROID_NDK_ROOT }}/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android28-clang
+          AR_aarch64_linux_android: ${{ env.ANDROID_NDK_ROOT }}/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar
+        run: cargo +1.80.0 build --target aarch64-linux-android
+
+      - name: Package Rust bridge
+        run: |
+          mkdir -p app/src/main/jniLibs/arm64-v8a
+          cp native/target/aarch64-linux-android/debug/libscout_operator_native.so \
+            app/src/main/jniLibs/arm64-v8a/libscout_operator_native.so
 
       - name: Build debug APK
         run: gradle --no-daemon :app:assembleDebug
