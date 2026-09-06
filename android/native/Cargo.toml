@@ -11,6 +11,7 @@ crate-type = ["cdylib"]
 jni = "=0.21.1"
 tokio = { version = "=1.53.1", features = ["rt"] }
 wallet-engine = { path = "../../crates/wallet-engine" }
+zeroize = "=1.8.1"
 
 [lints.rust]
 unsafe_code = "deny"
