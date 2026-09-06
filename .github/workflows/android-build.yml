@@ -68,15 +68,48 @@ jobs:
           cp native/target/aarch64-linux-android/debug/libscout_operator_native.so \
             app/src/main/jniLibs/arm64-v8a/libscout_operator_native.so
 
+      - name: Validate Devnet signing secrets
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          SCOUT_SIGNING_KEYSTORE_B64: ${{ secrets.SCOUT_SIGNING_KEYSTORE_B64 }}
+          SCOUT_SIGNING_STORE_PASSWORD: ${{ secrets.SCOUT_SIGNING_STORE_PASSWORD }}
+          SCOUT_SIGNING_KEY_ALIAS: ${{ secrets.SCOUT_SIGNING_KEY_ALIAS }}
+          SCOUT_SIGNING_KEY_PASSWORD: ${{ secrets.SCOUT_SIGNING_KEY_PASSWORD }}
+        run: |
+          test -n "$SCOUT_SIGNING_KEYSTORE_B64"
+          test -n "$SCOUT_SIGNING_STORE_PASSWORD"
+          test -n "$SCOUT_SIGNING_KEY_ALIAS"
+          test -n "$SCOUT_SIGNING_KEY_PASSWORD"
+
       - name: Build debug APK
+        env:
+          SCOUT_SIGNING_KEYSTORE_B64: ${{ secrets.SCOUT_SIGNING_KEYSTORE_B64 }}
+          SCOUT_SIGNING_STORE_PASSWORD: ${{ secrets.SCOUT_SIGNING_STORE_PASSWORD }}
+          SCOUT_SIGNING_KEY_ALIAS: ${{ secrets.SCOUT_SIGNING_KEY_ALIAS }}
+          SCOUT_SIGNING_KEY_PASSWORD: ${{ secrets.SCOUT_SIGNING_KEY_PASSWORD }}
+          SCOUT_VERSION_CODE: ${{ github.run_number }}
+          SCOUT_VERSION_NAME: 0.2.${{ github.run_number }}
         run: gradle --no-daemon :app:assembleDebug
+
+      - name: Verify APK signature
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          APKSIGNER="$(find "$ANDROID_SDK_ROOT/build-tools" -type f -name apksigner | sort -V | tail -n 1)"
+          test -n "$APKSIGNER"
+          test -x "$APKSIGNER"
+          "$APKSIGNER" verify \
+            --verbose \
+            --print-certs \
+            app/build/outputs/apk/debug/app-debug.apk
 
       - name: Prepare named APK
         if: github.event_name != 'pull_request'
         run: |
           SHORT_SHA="${GITHUB_SHA::7}"
+          VERSION_NAME="0.2.${GITHUB_RUN_NUMBER}"
+
           cp app/build/outputs/apk/debug/app-debug.apk \
-            "app/build/outputs/apk/debug/scout-operator-v0.2.0-${SHORT_SHA}.apk"
+            "app/build/outputs/apk/debug/scout-operator-v${VERSION_NAME}-${SHORT_SHA}.apk"
 
       - name: Upload CI artifact
         uses: actions/upload-artifact@v4
@@ -93,7 +126,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           SHORT_SHA="${GITHUB_SHA::7}"
-          APK="android/app/build/outputs/apk/debug/scout-operator-v0.2.0-${SHORT_SHA}.apk"
+          VERSION_NAME="0.2.${GITHUB_RUN_NUMBER}"
+          APK="android/app/build/outputs/apk/debug/scout-operator-v${VERSION_NAME}-${SHORT_SHA}.apk"
 
           if gh release view devnet-latest >/dev/null 2>&1; then
             gh release upload devnet-latest "$APK" --clobber
