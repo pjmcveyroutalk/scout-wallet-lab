@@ -47,12 +47,19 @@ jobs:
         with:
           targets: aarch64-linux-android
 
+      - name: Locate Android NDK
+        run: |
+          NDK_DIR="$(find "$ANDROID_SDK_ROOT/ndk" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n 1)"
+          test -n "$NDK_DIR"
+          test -x "$NDK_DIR/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android28-clang"
+          echo "SCOUT_ANDROID_NDK=$NDK_DIR" >> "$GITHUB_ENV"
+
       - name: Build Rust Android bridge
         working-directory: android/native
         env:
-          CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER: ${{ env.ANDROID_NDK_ROOT }}/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android28-clang
-          CC_aarch64_linux_android: ${{ env.ANDROID_NDK_ROOT }}/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android28-clang
-          AR_aarch64_linux_android: ${{ env.ANDROID_NDK_ROOT }}/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar
+          CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER: ${{ env.SCOUT_ANDROID_NDK }}/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android28-clang
+          CC_aarch64_linux_android: ${{ env.SCOUT_ANDROID_NDK }}/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android28-clang
+          AR_aarch64_linux_android: ${{ env.SCOUT_ANDROID_NDK }}/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar
         run: cargo +1.80.0 build --target aarch64-linux-android
 
       - name: Package Rust bridge
