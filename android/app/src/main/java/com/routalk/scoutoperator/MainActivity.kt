@@ -7,25 +7,23 @@ import android.view.Gravity
 import android.view.ViewGroup
 import android.widget.Button
 import android.widget.LinearLayout
+import android.widget.ScrollView
 import android.widget.TextView
 
 class MainActivity : Activity() {
     private data class BridgeRuntimeState(
         val identity: String,
         val status: String,
-        val verified: Boolean,
+        val rpcCluster: String,
+        val rpcEndpoint: String,
+        val bridgeVerified: Boolean,
+        val rpcVerified: Boolean,
     )
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
         val padding = (24 * resources.displayMetrics.density).toInt()
-
-        val root = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER_HORIZONTAL
-            setPadding(padding, padding, padding, padding)
-        }
 
         fun text(value: String, size: Float): TextView =
             TextView(this).apply {
@@ -34,32 +32,47 @@ class MainActivity : Activity() {
                 setPadding(0, padding / 2, 0, padding / 2)
             }
 
-        root.addView(text("SCOUT WALLET OPERATOR", 24f))
-        root.addView(text("DEVNET", 16f))
-
-        root.addView(text("Rust bridge", 14f))
+        val root = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_HORIZONTAL
+            setPadding(padding, padding, padding, padding)
+        }
 
         val bridgeRuntimeState =
             try {
                 val identity = NativeBridge.engineName()
                 val status = NativeBridge.bridgeStatus()
+                val rpcCluster = NativeBridge.rpcCluster()
+                val rpcEndpoint = NativeBridge.rpcEndpoint()
 
                 BridgeRuntimeState(
                     identity = identity,
                     status = status,
-                    verified =
+                    rpcCluster = rpcCluster,
+                    rpcEndpoint = rpcEndpoint,
+                    bridgeVerified =
                         identity.isNotBlank() &&
                             identity.endsWith(":devnet") &&
                             status == "wallet-operations-locked",
+                    rpcVerified =
+                        rpcCluster == "devnet" &&
+                            rpcEndpoint == "https://api.devnet.solana.com",
                 )
             } catch (error: Throwable) {
                 BridgeRuntimeState(
                     identity = "Unavailable: ${error.javaClass.simpleName}",
                     status = "bridge-load-failed",
-                    verified = false,
+                    rpcCluster = "Unavailable",
+                    rpcEndpoint = "Unavailable",
+                    bridgeVerified = false,
+                    rpcVerified = false,
                 )
             }
 
+        root.addView(text("SCOUT WALLET OPERATOR", 24f))
+        root.addView(text("DEVNET", 16f))
+
+        root.addView(text("Rust bridge", 14f))
         root.addView(text(bridgeRuntimeState.identity, 16f))
 
         root.addView(text("Bridge status", 14f))
@@ -68,8 +81,26 @@ class MainActivity : Activity() {
         root.addView(text("Runtime verification", 14f))
         root.addView(
             text(
-                if (bridgeRuntimeState.verified) {
+                if (bridgeRuntimeState.bridgeVerified) {
                     "VERIFIED — RUST BRIDGE LOADED"
+                } else {
+                    "NOT VERIFIED"
+                },
+                16f,
+            ),
+        )
+
+        root.addView(text("RPC cluster", 14f))
+        root.addView(text(bridgeRuntimeState.rpcCluster, 16f))
+
+        root.addView(text("RPC endpoint", 14f))
+        root.addView(text(bridgeRuntimeState.rpcEndpoint, 16f))
+
+        root.addView(text("RPC configuration", 14f))
+        root.addView(
+            text(
+                if (bridgeRuntimeState.rpcVerified) {
+                    "VERIFIED — DEVNET ONLY"
                 } else {
                     "NOT VERIFIED"
                 },
@@ -123,6 +154,16 @@ class MainActivity : Activity() {
         root.addView(text("MAINNET — DISABLED", 14f))
         root.addView(text("TRANSACTION SUBMISSION — DISABLED", 14f))
 
-        setContentView(root)
+        val scrollView = ScrollView(this).apply {
+            addView(
+                root,
+                ViewGroup.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                ),
+            )
+        }
+
+        setContentView(scrollView)
     }
 }
