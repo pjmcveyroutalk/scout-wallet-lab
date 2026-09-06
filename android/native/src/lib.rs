@@ -154,3 +154,53 @@ pub extern "system" fn Java_com_routalk_scoutoperator_NativeBridge_lockedVaultDe
 
     java_string(env, &format!("ok:{}", account.address()))
 }
+
+#[allow(unsafe_code)]
+#[no_mangle]
+pub extern "system" fn Java_com_routalk_scoutoperator_NativeBridge_lockedVaultDevnetBalance(
+    mut env: JNIEnv<'_>,
+    _class: JClass<'_>,
+    vault_json: JString<'_>,
+) -> jstring {
+    let vault_json: String = match env.get_string(&vault_json) {
+        Ok(value) => value.into(),
+        Err(_) => return java_string(env, "invalid-vault-json"),
+    };
+
+    if vault_json.trim().is_empty() {
+        return java_string(env, "empty-vault-json");
+    }
+
+    let vault = match LockedVault::from_json(&vault_json) {
+        Ok(vault) => vault,
+        Err(error) => return java_string(env, &format!("vault-parse-failed:{error}")),
+    };
+
+    let account = match vault.devnet_account() {
+        Ok(account) => account,
+        Err(error) => return java_string(env, &format!("address-derivation-failed:{error}")),
+    };
+
+    let runtime = match Builder::new_current_thread().enable_all().build() {
+        Ok(runtime) => runtime,
+        Err(_) => return java_string(env, "runtime-initialization-failed"),
+    };
+
+    let rpc = match DevnetRpc::new() {
+        Ok(rpc) => rpc,
+        Err(error) => return java_string(env, &format!("rpc-init-failed:{error}")),
+    };
+
+    match runtime.block_on(rpc.get_balance(account.address())) {
+        Ok(lamports) => {
+            java_string(
+                env,
+                &format!(
+                    "ok:{}:{lamports}",
+                    account.address(),
+                ),
+            )
+        }
+        Err(error) => java_string(env, &format!("rpc-failed:{error}")),
+    }
+}
