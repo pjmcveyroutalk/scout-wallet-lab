@@ -1,7 +1,7 @@
 #![deny(unsafe_code)]
 
 use jni::{
-    objects::{JClass, JString},
+    objects::{JByteArray, JClass, JString},
     sys::jstring,
     JNIEnv,
 };
@@ -9,6 +9,7 @@ use tokio::runtime::Builder;
 use wallet_engine::{
     engine_name, Cluster, DevnetRpc, LockedVault, SecretPassphrase,
 };
+use zeroize::Zeroizing;
 
 fn java_string(env: JNIEnv<'_>, value: &str) -> jstring {
     match env.new_string(value) {
@@ -79,18 +80,25 @@ pub extern "system" fn Java_com_routalk_scoutoperator_NativeBridge_devnetBlockHe
 #[allow(unsafe_code)]
 #[no_mangle]
 pub extern "system" fn Java_com_routalk_scoutoperator_NativeBridge_createLockedDevnetVault(
-    mut env: JNIEnv<'_>,
+    env: JNIEnv<'_>,
     _class: JClass<'_>,
-    passphrase: JString<'_>,
+    passphrase_bytes: JByteArray<'_>,
 ) -> jstring {
-    let passphrase: String = match env.get_string(&passphrase) {
-        Ok(value) => value.into(),
-        Err(_) => return java_string(env, "invalid-passphrase"),
-    };
+    let passphrase_bytes =
+        match env.convert_byte_array(&passphrase_bytes) {
+            Ok(value) => Zeroizing::new(value),
+            Err(_) => return java_string(env, "invalid-passphrase"),
+        };
 
-    if passphrase.is_empty() {
+    if passphrase_bytes.is_empty() {
         return java_string(env, "empty-passphrase");
     }
+
+    let passphrase =
+        match String::from_utf8(passphrase_bytes.to_vec()) {
+            Ok(value) => value,
+            Err(_) => return java_string(env, "passphrase-not-utf8"),
+        };
 
     let secret_passphrase = SecretPassphrase::new(passphrase);
 
