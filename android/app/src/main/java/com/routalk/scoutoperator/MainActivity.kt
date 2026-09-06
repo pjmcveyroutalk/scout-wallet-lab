@@ -10,6 +10,12 @@ import android.widget.LinearLayout
 import android.widget.TextView
 
 class MainActivity : Activity() {
+    private data class BridgeRuntimeState(
+        val identity: String,
+        val status: String,
+        val verified: Boolean,
+    )
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -33,32 +39,36 @@ class MainActivity : Activity() {
 
         root.addView(text("Rust bridge", 14f))
 
-        val bridgeIdentity: String
-        val bridgeStatus: String
-        val bridgeVerified: Boolean
+        val bridgeRuntimeState =
+            try {
+                val identity = NativeBridge.engineName()
+                val status = NativeBridge.bridgeStatus()
 
-        try {
-            bridgeIdentity = NativeBridge.engineName()
-            bridgeStatus = NativeBridge.bridgeStatus()
-            bridgeVerified =
-                bridgeIdentity.isNotBlank() &&
-                    bridgeIdentity.endsWith(":devnet") &&
-                    bridgeStatus == "wallet-operations-locked"
-        } catch (error: Throwable) {
-            bridgeIdentity = "Unavailable: ${error.javaClass.simpleName}"
-            bridgeStatus = "bridge-load-failed"
-            bridgeVerified = false
-        }
+                BridgeRuntimeState(
+                    identity = identity,
+                    status = status,
+                    verified =
+                        identity.isNotBlank() &&
+                            identity.endsWith(":devnet") &&
+                            status == "wallet-operations-locked",
+                )
+            } catch (error: Throwable) {
+                BridgeRuntimeState(
+                    identity = "Unavailable: ${error.javaClass.simpleName}",
+                    status = "bridge-load-failed",
+                    verified = false,
+                )
+            }
 
-        root.addView(text(bridgeIdentity, 16f))
+        root.addView(text(bridgeRuntimeState.identity, 16f))
 
         root.addView(text("Bridge status", 14f))
-        root.addView(text(bridgeStatus, 16f))
+        root.addView(text(bridgeRuntimeState.status, 16f))
 
         root.addView(text("Runtime verification", 14f))
         root.addView(
             text(
-                if (bridgeVerified) {
+                if (bridgeRuntimeState.verified) {
                     "VERIFIED — RUST BRIDGE LOADED"
                 } else {
                     "NOT VERIFIED"
