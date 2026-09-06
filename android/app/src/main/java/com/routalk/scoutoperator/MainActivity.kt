@@ -19,6 +19,7 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
+import java.math.BigInteger
 
 class MainActivity : Activity() {
     private var passphraseField: EditText? = null
@@ -52,6 +53,13 @@ class MainActivity : Activity() {
         val address: String?,
         val status: String,
         val retryAllowed: Boolean,
+    )
+
+    private data class BalanceRefreshResult(
+        val success: Boolean,
+        val lamports: String?,
+        val sol: String?,
+        val status: String,
     )
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -490,15 +498,81 @@ class MainActivity : Activity() {
         root.addView(identityStatus)
 
         root.addView(text("Balance", 14f))
-        root.addView(text("Unavailable", 16f))
+
+        val balanceStatus =
+            text(
+                if (vaultIdentityState.verified) {
+                    "NOT CHECKED"
+                } else {
+                    "Unavailable"
+                },
+                16f,
+            )
+
+        root.addView(balanceStatus)
 
         val refreshBalance = Button(this).apply {
             text = "REFRESH BALANCE"
-            isEnabled = false
-            inputType = InputType.TYPE_NULL
+
+            isEnabled =
+                bridgeRuntimeState.bridgeVerified &&
+                    bridgeRuntimeState.rpcVerified &&
+                    vaultStorageState.hasReadableVault &&
+                    verifiedPublicAddress != null
 
             contentDescription =
-                "Balance unavailable until read-only wallet access is explicitly opened"
+                "Refresh verified Scout Devnet wallet balance using read-only RPC"
+        }
+
+        refreshBalance.setOnClickListener {
+            val expectedAddress =
+                verifiedPublicAddress
+
+            if (expectedAddress.isNullOrBlank()) {
+                balanceStatus.text =
+                    "BALANCE UNAVAILABLE — VERIFIED IDENTITY MISSING"
+
+                refreshBalance.isEnabled = false
+                return@setOnClickListener
+            }
+
+            refreshBalance.isEnabled = false
+            balanceStatus.text = "REFRESHING DEVNET BALANCE..."
+
+            Thread {
+                val balanceResult =
+                    try {
+                        refreshVerifiedBalance(
+                            expectedAddress,
+                        )
+                    } catch (error: Throwable) {
+                        BalanceRefreshResult(
+                            success = false,
+                            lamports = null,
+                            sol = null,
+                            status =
+                                "BALANCE REFRESH FAILED — " +
+                                    error.javaClass.simpleName,
+                        )
+                    }
+
+                runOnUiThread {
+                    if (balanceResult.success) {
+                        balanceStatus.text =
+                            "VERIFIED — DEVNET BALANCE\n" +
+                                "${balanceResult.sol} SOL\n" +
+                                "${balanceResult.lamports} lamports"
+                    } else {
+                        balanceStatus.text =
+                            balanceResult.status
+                    }
+
+                    refreshBalance.isEnabled =
+                        bridgeRuntimeState.bridgeVerified &&
+                            bridgeRuntimeState.rpcVerified &&
+                            verifiedPublicAddress != null
+                }
+            }.start()
         }
 
         root.addView(
@@ -635,12 +709,24 @@ class MainActivity : Activity() {
                                 copyAddress.isEnabled =
                                     verifiedPublicAddress != null
 
+                                balanceStatus.text =
+                                    "NOT CHECKED"
+
+                                refreshBalance.isEnabled =
+                                    bridgeRuntimeState.bridgeVerified &&
+                                        bridgeRuntimeState.rpcVerified &&
+                                        verifiedPublicAddress != null
+
                                 createWallet.isEnabled = false
                                 passphrase.isEnabled = false
                                 confirmation.isEnabled = false
                             } else {
                                 verifiedPublicAddress = null
                                 copyAddress.isEnabled = false
+                                refreshBalance.isEnabled = false
+
+                                balanceStatus.text =
+                                    "Unavailable"
 
                                 creationStatus.text =
                                     creationResult.status
@@ -675,6 +761,163 @@ class MainActivity : Activity() {
         confirmationField = null
 
         super.onDestroy()
+    }
+
+    private fun refreshVerifiedBalance(
+        expectedAddress: String,
+    ): BalanceRefreshResult {
+        if (expectedAddress.isBlank()) {
+            return BalanceRefreshResult(
+                success = false,
+                lamports = null,
+                sol = null,
+                status =
+                    "BALANCE REFRESH BLOCKED — VERIFIED IDENTITY MISSING",
+            )
+        }
+
+        val vaultStore =
+            LockedVaultStore(this)
+
+        if (!vaultStore.hasVault()) {
+            return BalanceRefreshResult(
+                success = false,
+                lamports = null,
+                sol = null,
+                status =
+                    "BALANCE REFRESH BLOCKED — ENCRYPTED VAULT MISSING",
+            )
+        }
+
+        val lockedVaultJson =
+            vaultStore.loadVault()
+                ?: return BalanceRefreshResult(
+                    success = false,
+                    lamports = null,
+                    sol = null,
+                    status =
+                        "BALANCE REFRESH BLOCKED — ENCRYPTED VAULT UNREADABLE",
+                )
+
+        val nativeResult =
+            NativeBridge.lockedVaultDevnetBalance(
+                lockedVaultJson,
+            )
+
+        if (!nativeResult.startsWith("ok:")) {
+            return BalanceRefreshResult(
+                success = false,
+                lamports = null,
+                sol = null,
+                status =
+                    "BALANCE REFRESH FAILED — $nativeResult",
+            )
+        }
+
+        val resultParts =
+            nativeResult.split(
+                ":",
+                limit = 3,
+            )
+
+        if (
+            resultParts.size != 3 ||
+            resultParts[0] != "ok"
+        ) {
+            return BalanceRefreshResult(
+                success = false,
+                lamports = null,
+                sol = null,
+                status =
+                    "BALANCE REFRESH FAILED — INVALID NATIVE RESPONSE",
+            )
+        }
+
+        val returnedAddress =
+            resultParts[1]
+
+        val lamports =
+            resultParts[2]
+
+        if (
+            returnedAddress.isBlank() ||
+            returnedAddress != expectedAddress
+        ) {
+            return BalanceRefreshResult(
+                success = false,
+                lamports = null,
+                sol = null,
+                status =
+                    "BALANCE REFRESH BLOCKED — IDENTITY MISMATCH",
+            )
+        }
+
+        if (
+            lamports.isBlank() ||
+            !lamports.all { character ->
+                character in '0'..'9'
+            }
+        ) {
+            return BalanceRefreshResult(
+                success = false,
+                lamports = null,
+                sol = null,
+                status =
+                    "BALANCE REFRESH FAILED — INVALID LAMPORT VALUE",
+            )
+        }
+
+        val sol =
+            try {
+                formatLamportsAsSol(lamports)
+            } catch (_: Throwable) {
+                return BalanceRefreshResult(
+                    success = false,
+                    lamports = null,
+                    sol = null,
+                    status =
+                        "BALANCE REFRESH FAILED — BALANCE FORMAT INVALID",
+                )
+            }
+
+        return BalanceRefreshResult(
+            success = true,
+            lamports = lamports,
+            sol = sol,
+            status = "VERIFIED — DEVNET BALANCE",
+        )
+    }
+
+    private fun formatLamportsAsSol(
+        lamports: String,
+    ): String {
+        val lamportsValue =
+            BigInteger(lamports)
+
+        require(lamportsValue.signum() >= 0)
+
+        val lamportsPerSol =
+            BigInteger("1000000000")
+
+        val parts =
+            lamportsValue.divideAndRemainder(
+                lamportsPerSol,
+            )
+
+        val wholeSol =
+            parts[0].toString()
+
+        val fractionalLamports =
+            parts[1]
+                .toString()
+                .padStart(9, '0')
+                .trimEnd('0')
+
+        return if (fractionalLamports.isEmpty()) {
+            wholeSol
+        } else {
+            "$wholeSol.$fractionalLamports"
+        }
     }
 
     private fun createAndVerifyWallet(
