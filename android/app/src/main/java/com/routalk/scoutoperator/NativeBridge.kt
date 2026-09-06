@@ -14,4 +14,6 @@ internal object NativeBridge {
     external fun rpcCluster(): String
 
     external fun rpcEndpoint(): String
+
+    external fun devnetBlockHeight(): String
 }
