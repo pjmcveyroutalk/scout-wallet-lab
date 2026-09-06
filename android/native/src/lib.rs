@@ -1,8 +1,14 @@
 #![deny(unsafe_code)]
 
-use jni::{objects::JClass, sys::jstring, JNIEnv};
+use jni::{
+    objects::{JClass, JString},
+    sys::jstring,
+    JNIEnv,
+};
 use tokio::runtime::Builder;
-use wallet_engine::{engine_name, Cluster, DevnetRpc};
+use wallet_engine::{
+    engine_name, Cluster, DevnetRpc, LockedVault, SecretPassphrase,
+};
 
 fn java_string(env: JNIEnv<'_>, value: &str) -> jstring {
     match env.new_string(value) {
@@ -68,4 +74,46 @@ pub extern "system" fn Java_com_routalk_scoutoperator_NativeBridge_devnetBlockHe
         Ok(block_height) => java_string(env, &format!("ok:{block_height}")),
         Err(error) => java_string(env, &format!("rpc-failed:{error}")),
     }
+}
+
+#[allow(unsafe_code)]
+#[no_mangle]
+pub extern "system" fn Java_com_routalk_scoutoperator_NativeBridge_createLockedDevnetVault(
+    mut env: JNIEnv<'_>,
+    _class: JClass<'_>,
+    passphrase: JString<'_>,
+) -> jstring {
+    let passphrase: String = match env.get_string(&passphrase) {
+        Ok(value) => value.into(),
+        Err(_) => return java_string(env, "invalid-passphrase"),
+    };
+
+    if passphrase.is_empty() {
+        return java_string(env, "empty-passphrase");
+    }
+
+    let secret_passphrase = SecretPassphrase::new(passphrase);
+
+    let vault = match LockedVault::generate(&secret_passphrase) {
+        Ok(vault) => vault,
+        Err(error) => return java_string(env, &format!("vault-generation-failed:{error}")),
+    };
+
+    let account = match vault.devnet_account() {
+        Ok(account) => account,
+        Err(error) => return java_string(env, &format!("address-derivation-failed:{error}")),
+    };
+
+    let vault_json = match vault.to_json() {
+        Ok(encoded) => encoded,
+        Err(error) => return java_string(env, &format!("vault-serialization-failed:{error}")),
+    };
+
+    let result = format!(
+        "ok:{}:{}",
+        account.address(),
+        vault_json,
+    );
+
+    java_string(env, &result)
 }
