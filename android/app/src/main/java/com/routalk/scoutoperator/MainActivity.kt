@@ -1,6 +1,9 @@
 package com.routalk.scoutoperator
 
 import android.app.Activity
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import android.os.Build
 import android.os.Bundle
 import android.text.InputType
@@ -15,6 +18,7 @@ import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
+import android.widget.Toast
 
 class MainActivity : Activity() {
     private var passphraseField: EditText? = null
@@ -203,6 +207,13 @@ class MainActivity : Activity() {
                         },
                 )
             }
+
+        var verifiedPublicAddress =
+            vaultIdentityState.address
+                ?.takeIf {
+                    vaultIdentityState.verified &&
+                        it.isNotBlank()
+                }
 
         root.addView(text("SCOUT WALLET OPERATOR", 24f))
         root.addView(text("DEVNET", 16f))
@@ -417,6 +428,57 @@ class MainActivity : Activity() {
 
         root.addView(addressStatus)
 
+        val copyAddress = Button(this).apply {
+            text = "COPY ADDRESS"
+
+            isEnabled =
+                verifiedPublicAddress != null
+
+            contentDescription =
+                "Copy verified Scout Devnet public wallet address"
+        }
+
+        copyAddress.setOnClickListener {
+            val address =
+                verifiedPublicAddress
+
+            if (address.isNullOrBlank()) {
+                Toast.makeText(
+                    this,
+                    "Verified public address unavailable",
+                    Toast.LENGTH_SHORT,
+                ).show()
+
+                return@setOnClickListener
+            }
+
+            val clipboard =
+                getSystemService(Context.CLIPBOARD_SERVICE)
+                    as ClipboardManager
+
+            val clip =
+                ClipData.newPlainText(
+                    "Scout Devnet public address",
+                    address,
+                )
+
+            clipboard.setPrimaryClip(clip)
+
+            Toast.makeText(
+                this,
+                "Public address copied",
+                Toast.LENGTH_SHORT,
+            ).show()
+        }
+
+        root.addView(
+            copyAddress,
+            ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+            ),
+        )
+
         root.addView(text("Identity", 14f))
 
         val identityStatus =
@@ -546,6 +608,9 @@ class MainActivity : Activity() {
                             clearSensitiveFields()
 
                             if (creationResult.success) {
+                                val createdAddress =
+                                    creationResult.address
+
                                 storageStatus.text =
                                     "VERIFIED — ENCRYPTED VAULT STORED"
 
@@ -553,7 +618,7 @@ class MainActivity : Activity() {
                                     "Locked encrypted vault detected"
 
                                 addressStatus.text =
-                                    creationResult.address ?: "Unavailable"
+                                    createdAddress ?: "Unavailable"
 
                                 identityStatus.text =
                                     "VERIFIED — DEVNET PUBLIC IDENTITY"
@@ -561,10 +626,22 @@ class MainActivity : Activity() {
                                 creationStatus.text =
                                     creationResult.status
 
+                                verifiedPublicAddress =
+                                    createdAddress
+                                        ?.takeIf {
+                                            it.isNotBlank()
+                                        }
+
+                                copyAddress.isEnabled =
+                                    verifiedPublicAddress != null
+
                                 createWallet.isEnabled = false
                                 passphrase.isEnabled = false
                                 confirmation.isEnabled = false
                             } else {
+                                verifiedPublicAddress = null
+                                copyAddress.isEnabled = false
+
                                 creationStatus.text =
                                     creationResult.status
 
