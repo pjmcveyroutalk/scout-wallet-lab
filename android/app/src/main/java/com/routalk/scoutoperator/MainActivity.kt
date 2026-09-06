@@ -20,6 +20,14 @@ class MainActivity : Activity() {
         val rpcVerified: Boolean,
     )
 
+    private data class VaultStorageState(
+        val hasStoredEntry: Boolean,
+        val lockedVaultJson: String?,
+    ) {
+        val hasReadableVault: Boolean
+            get() = !lockedVaultJson.isNullOrBlank()
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -66,6 +74,21 @@ class MainActivity : Activity() {
                     rpcEndpoint = "Unavailable",
                     bridgeVerified = false,
                     rpcVerified = false,
+                )
+            }
+
+        val vaultStorageState =
+            try {
+                val vaultStore = LockedVaultStore(this)
+
+                VaultStorageState(
+                    hasStoredEntry = vaultStore.hasVault(),
+                    lockedVaultJson = vaultStore.loadVault(),
+                )
+            } catch (_: Throwable) {
+                VaultStorageState(
+                    hasStoredEntry = false,
+                    lockedVaultJson = null,
                 )
             }
 
@@ -159,8 +182,34 @@ class MainActivity : Activity() {
             ),
         )
 
+        root.addView(text("Wallet storage", 14f))
+        root.addView(
+            text(
+                when {
+                    vaultStorageState.hasReadableVault ->
+                        "VERIFIED — ENCRYPTED VAULT STORED"
+
+                    vaultStorageState.hasStoredEntry ->
+                        "STORAGE ENTRY PRESENT — VAULT UNREADABLE"
+
+                    else ->
+                        "NO ENCRYPTED VAULT STORED"
+                },
+                16f,
+            ),
+        )
+
         root.addView(text("Wallet", 14f))
-        root.addView(text("Not initialized", 18f))
+        root.addView(
+            text(
+                if (vaultStorageState.hasReadableVault) {
+                    "Locked encrypted vault detected"
+                } else {
+                    "Not initialized"
+                },
+                18f,
+            ),
+        )
 
         val createWallet = Button(this).apply {
             text = "CREATE WALLET"
