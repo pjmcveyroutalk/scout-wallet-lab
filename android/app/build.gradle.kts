@@ -10,6 +10,17 @@ val scoutStorePassword = System.getenv("SCOUT_SIGNING_STORE_PASSWORD")
 val scoutKeyAlias = System.getenv("SCOUT_SIGNING_KEY_ALIAS")
 val scoutKeyPassword = System.getenv("SCOUT_SIGNING_KEY_PASSWORD")
 
+val scoutVersionCode =
+    System.getenv("SCOUT_VERSION_CODE")
+        ?.toIntOrNull()
+        ?.takeIf { it > 2 }
+        ?: 2
+
+val scoutVersionName =
+    System.getenv("SCOUT_VERSION_NAME")
+        ?.takeIf { it.isNotBlank() }
+        ?: "0.2.0"
+
 val scoutSigningAvailable =
     !scoutKeystoreBase64.isNullOrBlank() &&
         !scoutStorePassword.isNullOrBlank() &&
@@ -34,8 +45,8 @@ android {
         applicationId = "com.routalk.scoutoperator"
         minSdk = 28
         targetSdk = 35
-        versionCode = 2
-        versionName = "0.2.0"
+        versionCode = scoutVersionCode
+        versionName = scoutVersionName
     }
 
     signingConfigs {
