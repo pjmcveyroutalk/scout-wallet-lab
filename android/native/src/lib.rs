@@ -117,3 +117,32 @@ pub extern "system" fn Java_com_routalk_scoutoperator_NativeBridge_createLockedD
 
     java_string(env, &result)
 }
+
+#[allow(unsafe_code)]
+#[no_mangle]
+pub extern "system" fn Java_com_routalk_scoutoperator_NativeBridge_lockedVaultDevnetAddress(
+    mut env: JNIEnv<'_>,
+    _class: JClass<'_>,
+    vault_json: JString<'_>,
+) -> jstring {
+    let vault_json: String = match env.get_string(&vault_json) {
+        Ok(value) => value.into(),
+        Err(_) => return java_string(env, "invalid-vault-json"),
+    };
+
+    if vault_json.trim().is_empty() {
+        return java_string(env, "empty-vault-json");
+    }
+
+    let vault = match LockedVault::from_json(&vault_json) {
+        Ok(vault) => vault,
+        Err(error) => return java_string(env, &format!("vault-parse-failed:{error}")),
+    };
+
+    let account = match vault.devnet_account() {
+        Ok(account) => account,
+        Err(error) => return java_string(env, &format!("address-derivation-failed:{error}")),
+    };
+
+    java_string(env, &format!("ok:{}", account.address()))
+}
