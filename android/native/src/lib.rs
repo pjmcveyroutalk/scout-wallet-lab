@@ -1,6 +1,7 @@
 #![deny(unsafe_code)]
 
 mod account_history;
+mod recovery_backup;
 
 use account_history::fetch_locked_vault_devnet_history;
 use jni::{
