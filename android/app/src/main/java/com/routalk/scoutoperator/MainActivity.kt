@@ -559,11 +559,20 @@ class MainActivity : Activity() {
                 } else {
                     "Unavailable"
                 },
-                16f,
-            )
+                22f,
+            ).apply {
+                gravity = Gravity.CENTER
+                minHeight = padding * 4
+            }
 
         backupStatusView = backupStatus
-        root.addView(backupStatus)
+        root.addView(
+            backupStatus,
+            ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+            ),
+        )
 
         val exportBackup =
             Button(this).apply {
@@ -1021,7 +1030,42 @@ class MainActivity : Activity() {
                 }
 
             runOnUiThread {
-                backupStatus.text = preflightResult.status
+                backupStatus.text =
+                    if (preflightResult.success) {
+                        buildString {
+                            append("RESTORE PREFLIGHT")
+                            append("\n\n")
+                            append("PASS — VERIFIED")
+                            append("\n")
+                            append("NO WRITE PERFORMED")
+
+                            preflightResult.publicAddress
+                                ?.takeIf { it.isNotBlank() }
+                                ?.let { address ->
+                                    append("\n\n")
+                                    append("Address: ")
+                                    append(address)
+                                }
+                        }
+                    } else {
+                        buildString {
+                            append("RESTORE PREFLIGHT")
+                            append("\n\n")
+                            append("BLOCKED / FAILED")
+                            append("\n\n")
+                            append(preflightResult.status)
+                        }
+                    }
+
+                Toast.makeText(
+                    this,
+                    if (preflightResult.success) {
+                        "RESTORE PREFLIGHT PASS — NO WRITE PERFORMED"
+                    } else {
+                        "RESTORE PREFLIGHT BLOCKED / FAILED"
+                    },
+                    Toast.LENGTH_LONG,
+                ).show()
             }
         }.start()
     }
