@@ -150,6 +150,7 @@ internal object LockedVaultRestoreCoordinator {
         if (reloadedVaultJson == null) {
             return rollbackFailure(
                 vaultStore = vaultStore,
+                writtenVaultJson = extractedVaultJson,
                 status =
                     "RESTORE FAILED — WRITTEN VAULT COULD NOT BE RELOADED",
             )
@@ -158,6 +159,7 @@ internal object LockedVaultRestoreCoordinator {
         if (reloadedVaultJson != extractedVaultJson) {
             return rollbackFailure(
                 vaultStore = vaultStore,
+                writtenVaultJson = extractedVaultJson,
                 status =
                     "RESTORE FAILED — WRITTEN VAULT DID NOT MATCH BACKUP",
             )
@@ -171,6 +173,7 @@ internal object LockedVaultRestoreCoordinator {
         if (!restoredIdentityResult.startsWith("ok:")) {
             return rollbackFailure(
                 vaultStore = vaultStore,
+                writtenVaultJson = extractedVaultJson,
                 status =
                     "RESTORE FAILED — RESTORED VAULT IDENTITY INVALID",
             )
@@ -187,6 +190,7 @@ internal object LockedVaultRestoreCoordinator {
         ) {
             return rollbackFailure(
                 vaultStore = vaultStore,
+                writtenVaultJson = extractedVaultJson,
                 status =
                     "RESTORE FAILED — RESTORED IDENTITY MISMATCH",
             )
@@ -202,8 +206,30 @@ internal object LockedVaultRestoreCoordinator {
 
     private fun rollbackFailure(
         vaultStore: LockedVaultStore,
+        writtenVaultJson: String,
         status: String,
     ): RestoreResult {
+        val currentVaultJson =
+            vaultStore.loadVault()
+
+        if (currentVaultJson == null) {
+            return if (vaultStore.hasVault()) {
+                failure(
+                    "$status — CRITICAL: RESTORE STORAGE STATE INCONSISTENT",
+                )
+            } else {
+                failure(
+                    "$status — NEW RESTORE WRITE ALREADY ABSENT",
+                )
+            }
+        }
+
+        if (currentVaultJson != writtenVaultJson) {
+            return failure(
+                "$status — CRITICAL: RESTORE STATE CHANGED — CLEANUP NOT ATTEMPTED",
+            )
+        }
+
         val cleared =
             vaultStore.clearVault()
 
