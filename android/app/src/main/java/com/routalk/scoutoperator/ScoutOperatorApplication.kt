@@ -6,6 +6,9 @@ import android.app.Application
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
+import android.view.Gravity
+import android.widget.Button
+import android.widget.FrameLayout
 
 internal class ScoutOperatorApplication : Application() {
     @Volatile
@@ -17,15 +20,23 @@ internal class ScoutOperatorApplication : Application() {
         registerActivityLifecycleCallbacks(
             object : ActivityLifecycleCallbacks {
                 override fun onActivityResumed(activity: Activity) {
-                    if (
-                        activity !is MainActivity ||
-                        updateCheckStarted
-                    ) {
+                    if (activity !is MainActivity) {
+                        return
+                    }
+
+                    installManualUpdateControl(activity)
+
+                    if (updateCheckStarted) {
                         return
                     }
 
                     updateCheckStarted = true
-                    checkForUpdate(activity)
+
+                    checkForUpdate(
+                        activity = activity,
+                        showCurrentStatus = false,
+                        triggerButton = null,
+                    )
                 }
 
                 override fun onActivityCreated(
@@ -49,9 +60,71 @@ internal class ScoutOperatorApplication : Application() {
         )
     }
 
-    private fun checkForUpdate(
+    private fun installManualUpdateControl(
         activity: Activity,
     ) {
+        val contentRoot =
+            activity.findViewById<FrameLayout>(
+                android.R.id.content,
+            )
+
+        if (
+            contentRoot.findViewWithTag<Button>(
+                UPDATE_BUTTON_TAG,
+            ) != null
+        ) {
+            return
+        }
+
+        val margin =
+            (
+                UPDATE_BUTTON_MARGIN_DP *
+                    activity.resources.displayMetrics.density
+            ).toInt()
+
+        val button =
+            Button(activity).apply {
+                tag = UPDATE_BUTTON_TAG
+                text = "CHECK UPDATE"
+                contentDescription =
+                    "Check for the newest Scout Devnet application update"
+
+                setOnClickListener {
+                    checkForUpdate(
+                        activity = activity,
+                        showCurrentStatus = true,
+                        triggerButton = this,
+                    )
+                }
+            }
+
+        val layoutParams =
+            FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                Gravity.END or Gravity.BOTTOM,
+            ).apply {
+                setMargins(
+                    margin,
+                    margin,
+                    margin,
+                    margin,
+                )
+            }
+
+        contentRoot.addView(
+            button,
+            layoutParams,
+        )
+    }
+
+    private fun checkForUpdate(
+        activity: Activity,
+        showCurrentStatus: Boolean,
+        triggerButton: Button?,
+    ) {
+        triggerButton?.isEnabled = false
+
         Thread {
             val result =
                 try {
@@ -62,18 +135,10 @@ internal class ScoutOperatorApplication : Application() {
                     null
                 }
 
-            if (
-                result == null ||
-                !result.success ||
-                !result.updateAvailable
-            ) {
-                return@Thread
-            }
-
             val downloadUrl =
-                result.downloadUrl
+                result
+                    ?.downloadUrl
                     ?.takeIf { it.isNotBlank() }
-                    ?: return@Thread
 
             activity.runOnUiThread {
                 if (
@@ -83,11 +148,72 @@ internal class ScoutOperatorApplication : Application() {
                     return@runOnUiThread
                 }
 
-                showUpdateDialog(
-                    activity = activity,
-                    result = result,
-                    downloadUrl = downloadUrl,
-                )
+                triggerButton?.isEnabled = true
+
+                when {
+                    result == null -> {
+                        if (showCurrentStatus) {
+                            showStatusDialog(
+                                activity = activity,
+                                title = "Scout update check",
+                                message =
+                                    "UPDATE CHECK FAILED\n\n" +
+                                        "Scout could not reach the " +
+                                        "Devnet release service.",
+                            )
+                        }
+                    }
+
+                    !result.success -> {
+                        if (showCurrentStatus) {
+                            showStatusDialog(
+                                activity = activity,
+                                title = "Scout update check",
+                                message = result.status,
+                            )
+                        }
+                    }
+
+                    result.updateAvailable &&
+                        downloadUrl != null -> {
+                        showUpdateDialog(
+                            activity = activity,
+                            result = result,
+                            downloadUrl = downloadUrl,
+                        )
+                    }
+
+                    result.updateAvailable -> {
+                        if (showCurrentStatus) {
+                            showStatusDialog(
+                                activity = activity,
+                                title = "Scout update check",
+                                message =
+                                    "UPDATE FOUND, BUT DOWNLOAD " +
+                                        "URL WAS NOT VERIFIED.",
+                            )
+                        }
+                    }
+
+                    showCurrentStatus -> {
+                        showStatusDialog(
+                            activity = activity,
+                            title = "Scout is up to date",
+                            message =
+                                buildString {
+                                    append("Installed: ")
+                                    append(
+                                        result.installedVersionName,
+                                    )
+                                    append("\n\n")
+                                    append(
+                                        "No newer Scout Devnet " +
+                                            "build is available.",
+                                    )
+                                },
+                        )
+                    }
+                }
             }
         }.start()
     }
@@ -145,6 +271,21 @@ internal class ScoutOperatorApplication : Application() {
             .show()
     }
 
+    private fun showStatusDialog(
+        activity: Activity,
+        title: String,
+        message: String,
+    ) {
+        AlertDialog.Builder(activity)
+            .setTitle(title)
+            .setMessage(message)
+            .setCancelable(true)
+            .setPositiveButton("OK") { dialog, _ ->
+                dialog.dismiss()
+            }
+            .show()
+    }
+
     private fun openUpdate(
         activity: Activity,
         downloadUrl: String,
@@ -178,5 +319,10 @@ internal class ScoutOperatorApplication : Application() {
     private companion object {
         const val APPROVED_DOWNLOAD_PREFIX =
             "https://github.com/pjmcveyroutalk/scout-wallet-lab/"
+
+        const val UPDATE_BUTTON_TAG =
+            "scout-manual-update-control"
+
+        const val UPDATE_BUTTON_MARGIN_DP = 12
     }
 }
