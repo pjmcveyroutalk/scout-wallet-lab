@@ -82,37 +82,31 @@ class MainActivity : Activity() {
         ): EditText =
             EditText(this).apply {
                 hint = hintText
-
                 inputType =
                     InputType.TYPE_CLASS_TEXT or
                         InputType.TYPE_TEXT_VARIATION_PASSWORD or
                         InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
-
-                transformationMethod =
-                    PasswordTransformationMethod.getInstance()
-
+                transformationMethod = PasswordTransformationMethod.getInstance()
                 isSingleLine = true
                 maxLines = 1
-
                 contentDescription = description
 
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                     importantForAutofill =
                         View.IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS
-
                     setAutofillHints(null)
-
                     imeOptions =
                         imeOptions or
                             EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING
                 }
             }
 
-        val root = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER_HORIZONTAL
-            setPadding(padding, padding, padding, padding)
-        }
+        val root =
+            LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                gravity = Gravity.CENTER_HORIZONTAL
+                setPadding(padding, padding, padding, padding)
+            }
 
         val bridgeRuntimeState =
             try {
@@ -267,16 +261,15 @@ class MainActivity : Activity() {
         val networkStatus = text("NOT CHECKED", 16f)
         root.addView(networkStatus)
 
-        val checkDevnet = Button(this).apply {
-            text = "CHECK DEVNET"
-
-            isEnabled =
-                bridgeRuntimeState.bridgeVerified &&
-                    bridgeRuntimeState.rpcVerified
-
-            contentDescription =
-                "Perform read-only Solana Devnet network health check"
-        }
+        val checkDevnet =
+            Button(this).apply {
+                text = "CHECK DEVNET"
+                isEnabled =
+                    bridgeRuntimeState.bridgeVerified &&
+                        bridgeRuntimeState.rpcVerified
+                contentDescription =
+                    "Perform read-only Solana Devnet network health check"
+            }
 
         checkDevnet.setOnClickListener {
             checkDevnet.isEnabled = false
@@ -293,7 +286,6 @@ class MainActivity : Activity() {
                 runOnUiThread {
                     if (result.startsWith("ok:")) {
                         val blockHeight = result.removePrefix("ok:")
-
                         networkStatus.text =
                             "VERIFIED — DEVNET LIVE\n" +
                                 "Block height: $blockHeight"
@@ -324,10 +316,8 @@ class MainActivity : Activity() {
                 when {
                     vaultStorageState.hasReadableVault ->
                         "VERIFIED — ENCRYPTED VAULT STORED"
-
                     vaultStorageState.hasStoredEntry ->
                         "STORAGE ENTRY PRESENT — VAULT UNREADABLE"
-
                     else ->
                         "NO ENCRYPTED VAULT STORED"
                 },
@@ -335,7 +325,6 @@ class MainActivity : Activity() {
             )
 
         root.addView(storageStatus)
-
         root.addView(text("Wallet", 14f))
 
         val walletStatus =
@@ -349,7 +338,6 @@ class MainActivity : Activity() {
             )
 
         root.addView(walletStatus)
-
         root.addView(text("Wallet passphrase", 14f))
 
         val passphrase =
@@ -391,13 +379,10 @@ class MainActivity : Activity() {
                 when {
                     vaultStorageState.hasStoredEntry ->
                         "Wallet creation locked — vault storage already occupied."
-
                     !bridgeRuntimeState.bridgeVerified ->
                         "Wallet creation locked — Rust bridge not verified."
-
                     !bridgeRuntimeState.rpcVerified ->
                         "Wallet creation locked — Devnet RPC configuration not verified."
-
                     else ->
                         "READY — encrypted Devnet wallet creation gate open."
                 },
@@ -406,17 +391,16 @@ class MainActivity : Activity() {
 
         root.addView(creationStatus)
 
-        val createWallet = Button(this).apply {
-            text = "CREATE WALLET"
-
-            isEnabled =
-                bridgeRuntimeState.bridgeVerified &&
-                    bridgeRuntimeState.rpcVerified &&
-                    !vaultStorageState.hasStoredEntry
-
-            contentDescription =
-                "Create encrypted Scout Devnet wallet"
-        }
+        val createWallet =
+            Button(this).apply {
+                text = "CREATE WALLET"
+                isEnabled =
+                    bridgeRuntimeState.bridgeVerified &&
+                        bridgeRuntimeState.rpcVerified &&
+                        !vaultStorageState.hasStoredEntry
+                contentDescription =
+                    "Create encrypted Scout Devnet wallet"
+            }
 
         root.addView(
             createWallet,
@@ -436,19 +420,16 @@ class MainActivity : Activity() {
 
         root.addView(addressStatus)
 
-        val copyAddress = Button(this).apply {
-            text = "COPY ADDRESS"
-
-            isEnabled =
-                verifiedPublicAddress != null
-
-            contentDescription =
-                "Copy verified Scout Devnet public wallet address"
-        }
+        val copyAddress =
+            Button(this).apply {
+                text = "COPY ADDRESS"
+                isEnabled = verifiedPublicAddress != null
+                contentDescription =
+                    "Copy verified Scout Devnet public wallet address"
+            }
 
         copyAddress.setOnClickListener {
-            val address =
-                verifiedPublicAddress
+            val address = verifiedPublicAddress
 
             if (address.isNullOrBlank()) {
                 Toast.makeText(
@@ -456,7 +437,6 @@ class MainActivity : Activity() {
                     "Verified public address unavailable",
                     Toast.LENGTH_SHORT,
                 ).show()
-
                 return@setOnClickListener
             }
 
@@ -496,7 +476,6 @@ class MainActivity : Activity() {
             )
 
         root.addView(identityStatus)
-
         root.addView(text("Balance", 14f))
 
         val balanceStatus =
@@ -511,27 +490,24 @@ class MainActivity : Activity() {
 
         root.addView(balanceStatus)
 
-        val refreshBalance = Button(this).apply {
-            text = "REFRESH BALANCE"
-
-            isEnabled =
-                bridgeRuntimeState.bridgeVerified &&
-                    bridgeRuntimeState.rpcVerified &&
-                    vaultStorageState.hasReadableVault &&
-                    verifiedPublicAddress != null
-
-            contentDescription =
-                "Refresh verified Scout Devnet wallet balance using read-only RPC"
-        }
+        val refreshBalance =
+            Button(this).apply {
+                text = "REFRESH BALANCE"
+                isEnabled =
+                    bridgeRuntimeState.bridgeVerified &&
+                        bridgeRuntimeState.rpcVerified &&
+                        vaultStorageState.hasReadableVault &&
+                        verifiedPublicAddress != null
+                contentDescription =
+                    "Refresh verified Scout Devnet wallet balance using read-only RPC"
+            }
 
         refreshBalance.setOnClickListener {
-            val expectedAddress =
-                verifiedPublicAddress
+            val expectedAddress = verifiedPublicAddress
 
             if (expectedAddress.isNullOrBlank()) {
                 balanceStatus.text =
                     "BALANCE UNAVAILABLE — VERIFIED IDENTITY MISSING"
-
                 refreshBalance.isEnabled = false
                 return@setOnClickListener
             }
@@ -542,9 +518,7 @@ class MainActivity : Activity() {
             Thread {
                 val balanceResult =
                     try {
-                        refreshVerifiedBalance(
-                            expectedAddress,
-                        )
+                        refreshVerifiedBalance(expectedAddress)
                     } catch (error: Throwable) {
                         BalanceRefreshResult(
                             success = false,
@@ -563,8 +537,7 @@ class MainActivity : Activity() {
                                 "${balanceResult.sol} SOL\n" +
                                 "${balanceResult.lamports} lamports"
                     } else {
-                        balanceStatus.text =
-                            balanceResult.status
+                        balanceStatus.text = balanceResult.status
                     }
 
                     refreshBalance.isEnabled =
@@ -583,18 +556,119 @@ class MainActivity : Activity() {
             ),
         )
 
+        root.addView(text("Account history", 14f))
+
+        val historyStatus =
+            text(
+                if (vaultIdentityState.verified) {
+                    "NOT CHECKED — READ ONLY"
+                } else {
+                    "Unavailable"
+                },
+                16f,
+            )
+
+        root.addView(historyStatus)
+
+        val refreshHistory =
+            Button(this).apply {
+                text = "REFRESH HISTORY"
+                isEnabled =
+                    bridgeRuntimeState.bridgeVerified &&
+                        bridgeRuntimeState.rpcVerified &&
+                        vaultStorageState.hasReadableVault &&
+                        verifiedPublicAddress != null
+                contentDescription =
+                    "Refresh up to ten Scout Devnet account history records using read-only RPC"
+            }
+
+        refreshHistory.setOnClickListener {
+            val expectedAddress = verifiedPublicAddress
+
+            if (expectedAddress.isNullOrBlank()) {
+                historyStatus.text =
+                    "HISTORY UNAVAILABLE — VERIFIED IDENTITY MISSING"
+                refreshHistory.isEnabled = false
+                return@setOnClickListener
+            }
+
+            refreshHistory.isEnabled = false
+            historyStatus.text = "REFRESHING DEVNET HISTORY — READ ONLY..."
+
+            Thread {
+                val historyResult =
+                    try {
+                        DevnetHistoryReader.refresh(
+                            context = this,
+                            expectedAddress = expectedAddress,
+                        )
+                    } catch (error: Throwable) {
+                        DevnetHistoryReader.HistoryResult(
+                            success = false,
+                            records = emptyList(),
+                            status =
+                                "HISTORY REFRESH FAILED — " +
+                                    error.javaClass.simpleName,
+                        )
+                    }
+
+                runOnUiThread {
+                    if (historyResult.success) {
+                        historyStatus.text =
+                            if (historyResult.records.isEmpty()) {
+                                historyResult.status
+                            } else {
+                                buildString {
+                                    append(historyResult.status)
+                                    append("\n")
+                                    append("READ ONLY — MAX 10 RECORDS")
+
+                                    historyResult.records.forEachIndexed {
+                                            index,
+                                            record,
+                                            ->
+                                            append("\n\n")
+                                            append(index + 1)
+                                            append(". Slot ")
+                                            append(record.slot)
+                                            append("\n")
+                                            append(record.signature)
+                                        }
+                                }
+                            }
+                    } else {
+                        historyStatus.text = historyResult.status
+                    }
+
+                    refreshHistory.isEnabled =
+                        bridgeRuntimeState.bridgeVerified &&
+                            bridgeRuntimeState.rpcVerified &&
+                            verifiedPublicAddress != null
+                }
+            }.start()
+        }
+
+        root.addView(
+            refreshHistory,
+            ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+            ),
+        )
+
         root.addView(text("MAINNET — DISABLED", 14f))
         root.addView(text("TRANSACTION SUBMISSION — DISABLED", 14f))
 
-        val scrollView = ScrollView(this).apply {
-            addView(
-                root,
-                ViewGroup.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT,
-                    ViewGroup.LayoutParams.WRAP_CONTENT,
-                ),
-            )
-        }
+        val scrollView =
+            ScrollView(this).apply {
+                addView(
+                    root,
+                    ViewGroup.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.WRAP_CONTENT,
+                    ),
+                )
+            }
 
         setContentView(scrollView)
 
@@ -605,11 +679,8 @@ class MainActivity : Activity() {
         }
 
         createWallet.setOnClickListener {
-            val currentPassphrase =
-                passphraseField?.text
-
-            val currentConfirmation =
-                confirmationField?.text
+            val currentPassphrase = passphraseField?.text
+            val currentConfirmation = confirmationField?.text
 
             if (
                 currentPassphrase == null ||
@@ -617,7 +688,6 @@ class MainActivity : Activity() {
             ) {
                 creationStatus.text =
                     "WALLET CREATION BLOCKED — PASSPHRASE INPUT UNAVAILABLE"
-
                 clearSensitiveFields()
                 return@setOnClickListener
             }
@@ -632,29 +702,24 @@ class MainActivity : Activity() {
                 is PassphrasePolicy.ValidationResult.Invalid -> {
                     creationStatus.text =
                         "WALLET CREATION BLOCKED — ${validation.reason}"
-
                     clearSensitiveFields()
                 }
 
                 is PassphrasePolicy.ValidationResult.Valid -> {
-                    val passphraseBytes =
-                        validation.passphraseBytes
+                    val passphraseBytes = validation.passphraseBytes
 
                     clearSensitiveFields()
 
                     createWallet.isEnabled = false
                     passphrase.isEnabled = false
                     confirmation.isEnabled = false
-
                     creationStatus.text =
                         "CREATING ENCRYPTED DEVNET VAULT..."
 
                     Thread {
                         val creationResult =
                             try {
-                                createAndVerifyWallet(
-                                    passphraseBytes,
-                                )
+                                createAndVerifyWallet(passphraseBytes)
                             } catch (error: Throwable) {
                                 val storedEntryPresent =
                                     try {
@@ -669,50 +734,46 @@ class MainActivity : Activity() {
                                     status =
                                         "WALLET CREATION FAILED — " +
                                             error.javaClass.simpleName,
-                                    retryAllowed =
-                                        !storedEntryPresent,
+                                    retryAllowed = !storedEntryPresent,
                                 )
                             } finally {
-                                PassphrasePolicy.wipe(
-                                    passphraseBytes,
-                                )
+                                PassphrasePolicy.wipe(passphraseBytes)
                             }
 
                         runOnUiThread {
                             clearSensitiveFields()
 
                             if (creationResult.success) {
-                                val createdAddress =
-                                    creationResult.address
+                                val createdAddress = creationResult.address
 
                                 storageStatus.text =
                                     "VERIFIED — ENCRYPTED VAULT STORED"
-
                                 walletStatus.text =
                                     "Locked encrypted vault detected"
-
                                 addressStatus.text =
                                     createdAddress ?: "Unavailable"
-
                                 identityStatus.text =
                                     "VERIFIED — DEVNET PUBLIC IDENTITY"
-
                                 creationStatus.text =
                                     creationResult.status
 
                                 verifiedPublicAddress =
                                     createdAddress
-                                        ?.takeIf {
-                                            it.isNotBlank()
-                                        }
+                                        ?.takeIf { it.isNotBlank() }
 
                                 copyAddress.isEnabled =
                                     verifiedPublicAddress != null
 
-                                balanceStatus.text =
-                                    "NOT CHECKED"
+                                balanceStatus.text = "NOT CHECKED"
+                                historyStatus.text =
+                                    "NOT CHECKED — READ ONLY"
 
                                 refreshBalance.isEnabled =
+                                    bridgeRuntimeState.bridgeVerified &&
+                                        bridgeRuntimeState.rpcVerified &&
+                                        verifiedPublicAddress != null
+
+                                refreshHistory.isEnabled =
                                     bridgeRuntimeState.bridgeVerified &&
                                         bridgeRuntimeState.rpcVerified &&
                                         verifiedPublicAddress != null
@@ -724,12 +785,11 @@ class MainActivity : Activity() {
                                 verifiedPublicAddress = null
                                 copyAddress.isEnabled = false
                                 refreshBalance.isEnabled = false
+                                refreshHistory.isEnabled = false
 
-                                balanceStatus.text =
-                                    "Unavailable"
-
-                                creationStatus.text =
-                                    creationResult.status
+                                balanceStatus.text = "Unavailable"
+                                historyStatus.text = "Unavailable"
+                                creationStatus.text = creationResult.status
 
                                 createWallet.isEnabled =
                                     creationResult.retryAllowed &&
@@ -738,7 +798,6 @@ class MainActivity : Activity() {
 
                                 passphrase.isEnabled =
                                     creationResult.retryAllowed
-
                                 confirmation.isEnabled =
                                     creationResult.retryAllowed
                             }
@@ -776,8 +835,7 @@ class MainActivity : Activity() {
             )
         }
 
-        val vaultStore =
-            LockedVaultStore(this)
+        val vaultStore = LockedVaultStore(this)
 
         if (!vaultStore.hasVault()) {
             return BalanceRefreshResult(
@@ -833,11 +891,8 @@ class MainActivity : Activity() {
             )
         }
 
-        val returnedAddress =
-            resultParts[1]
-
-        val lamports =
-            resultParts[2]
+        val returnedAddress = resultParts[1]
+        val lamports = resultParts[2]
 
         if (
             returnedAddress.isBlank() ||
@@ -891,21 +946,18 @@ class MainActivity : Activity() {
     private fun formatLamportsAsSol(
         lamports: String,
     ): String {
-        val lamportsValue =
-            BigInteger(lamports)
+        val lamportsValue = BigInteger(lamports)
 
         require(lamportsValue.signum() >= 0)
 
-        val lamportsPerSol =
-            BigInteger("1000000000")
+        val lamportsPerSol = BigInteger("1000000000")
 
         val parts =
             lamportsValue.divideAndRemainder(
                 lamportsPerSol,
             )
 
-        val wholeSol =
-            parts[0].toString()
+        val wholeSol = parts[0].toString()
 
         val fractionalLamports =
             parts[1]
@@ -923,8 +975,7 @@ class MainActivity : Activity() {
     private fun createAndVerifyWallet(
         passphraseBytes: ByteArray,
     ): WalletCreationResult {
-        val vaultStore =
-            LockedVaultStore(this)
+        val vaultStore = LockedVaultStore(this)
 
         if (vaultStore.hasVault()) {
             return WalletCreationResult(
@@ -970,11 +1021,8 @@ class MainActivity : Activity() {
             )
         }
 
-        val generatedAddress =
-            resultParts[1]
-
-        val lockedVaultJson =
-            resultParts[2]
+        val generatedAddress = resultParts[1]
+        val lockedVaultJson = resultParts[2]
 
         if (
             generatedAddress.isBlank() ||
@@ -999,8 +1047,7 @@ class MainActivity : Activity() {
             )
         }
 
-        val storedVaultJson =
-            vaultStore.loadVault()
+        val storedVaultJson = vaultStore.loadVault()
 
         if (storedVaultJson == null) {
             return failureAfterStoredVault(
@@ -1080,3 +1127,4 @@ class MainActivity : Activity() {
         confirmationField?.text?.clear()
     }
 }
+
