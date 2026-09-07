@@ -8,24 +8,15 @@ internal object NativeBridge {
     }
 
     external fun engineName(): String
-
     external fun bridgeStatus(): String
-
     external fun rpcCluster(): String
-
     external fun rpcEndpoint(): String
-
     external fun devnetBlockHeight(): String
-
     external fun createLockedDevnetVault(passphraseBytes: ByteArray): String
-
     external fun lockedVaultDevnetAddress(vaultJson: String): String
-
     external fun lockedVaultDevnetBalance(vaultJson: String): String
-
     external fun lockedVaultDevnetHistory(vaultJson: String): String
-
     external fun createLockedVaultBackup(vaultJson: String): String
-
     external fun validateLockedVaultBackup(backupJson: String): String
+    external fun extractValidatedLockedVaultBackup(backupJson: String): String
 }
