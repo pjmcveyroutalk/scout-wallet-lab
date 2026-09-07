@@ -581,12 +581,12 @@ class MainActivity : Activity() {
 
         val validateBackup =
             Button(this).apply {
-                text = "IMPORT + VALIDATE BACKUP"
+                text = "IMPORT + RESTORE PREFLIGHT"
                 isEnabled =
                     bridgeRuntimeState.bridgeVerified &&
                         verifiedPublicAddress != null
                 contentDescription =
-                    "Import and validate encrypted Scout Devnet backup without restoring it"
+                    "Import and run restore preflight on encrypted Scout Devnet backup without writing it"
             }
 
         fullWidth(validateBackup)
@@ -671,14 +671,14 @@ class MainActivity : Activity() {
         validateBackup.setOnClickListener {
             if (verifiedPublicAddress.isNullOrBlank()) {
                 backupStatus.text =
-                    "BACKUP VALIDATION BLOCKED — VERIFIED IDENTITY MISSING"
+                    "RESTORE PREFLIGHT BLOCKED — VERIFIED IDENTITY MISSING"
                 validateBackup.isEnabled = false
                 return@setOnClickListener
             }
 
             pendingBackupJson = null
             backupStatus.text =
-                "CHOOSE ENCRYPTED DEVNET BACKUP TO VALIDATE"
+                "CHOOSE ENCRYPTED DEVNET BACKUP FOR RESTORE PREFLIGHT"
 
             try {
                 startActivityForResult(
@@ -956,7 +956,7 @@ class MainActivity : Activity() {
         val backupStatus = backupStatusView ?: return
 
         if (resultCode != RESULT_OK) {
-            backupStatus.text = "BACKUP VALIDATION CANCELED"
+            backupStatus.text = "RESTORE PREFLIGHT CANCELED"
             return
         }
 
@@ -972,12 +972,12 @@ class MainActivity : Activity() {
             verifiedPublicAddress
                 ?: run {
                     backupStatus.text =
-                        "BACKUP VALIDATION BLOCKED — VERIFIED IDENTITY MISSING"
+                        "RESTORE PREFLIGHT BLOCKED — VERIFIED IDENTITY MISSING"
                     return
                 }
 
         backupStatus.text =
-            "READING + VALIDATING ENCRYPTED DEVNET BACKUP..."
+            "READING + RUNNING RESTORE PREFLIGHT..."
 
         Thread {
             val fileResult =
@@ -998,36 +998,30 @@ class MainActivity : Activity() {
                     ?: run {
                         runOnUiThread {
                             backupStatus.text =
-                                "BACKUP VALIDATION FAILED — PACKAGE MISSING"
+                                "RESTORE PREFLIGHT FAILED — PACKAGE MISSING"
                         }
                         return@Thread
                     }
 
-            val validationResult =
+            val preflightResult =
                 try {
-                    LockedVaultBackupManager.validate(
+                    LockedVaultRestorePreflight.verify(
+                        context = this,
                         backupJson = backupJson,
                         expectedAddress = expectedAddress,
                     )
                 } catch (error: Throwable) {
-                    LockedVaultBackupManager.BackupResult(
+                    LockedVaultRestorePreflight.PreflightResult(
                         success = false,
                         publicAddress = null,
-                        backupJson = null,
                         status =
-                            "BACKUP VALIDATION FAILED — " +
+                            "RESTORE PREFLIGHT FAILED — " +
                                 error.javaClass.simpleName,
                     )
                 }
 
             runOnUiThread {
-                backupStatus.text =
-                    if (validationResult.success) {
-                        validationResult.status +
-                            "\nRESTORE NOT PERFORMED"
-                    } else {
-                        validationResult.status
-                    }
+                backupStatus.text = preflightResult.status
             }
         }.start()
     }
