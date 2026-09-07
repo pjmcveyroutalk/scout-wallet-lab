@@ -1,5 +1,7 @@
 #![deny(unsafe_code)]
 
+mod account_history;
+
 use jni::{
     objects::{JByteArray, JClass, JString},
     sys::jstring,
