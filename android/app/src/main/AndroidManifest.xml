@@ -4,6 +4,7 @@
     <uses-permission android:name="android.permission.INTERNET" />
 
     <application
+        android:name=".ScoutOperatorApplication"
         android:allowBackup="false"
         android:label="Scout Operator"
         android:supportsRtl="true"
