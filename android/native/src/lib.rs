@@ -9,6 +9,9 @@ use jni::{
     sys::jstring,
     JNIEnv,
 };
+use recovery_backup::{
+    create_locked_vault_backup, validate_locked_vault_backup,
+};
 use tokio::runtime::Builder;
 use wallet_engine::{
     engine_name, Cluster, DevnetRpc, LockedVault, SecretPassphrase,
@@ -108,17 +111,32 @@ pub extern "system" fn Java_com_routalk_scoutoperator_NativeBridge_createLockedD
 
     let vault = match LockedVault::generate(&secret_passphrase) {
         Ok(vault) => vault,
-        Err(error) => return java_string(env, &format!("vault-generation-failed:{error}")),
+        Err(error) => {
+            return java_string(
+                env,
+                &format!("vault-generation-failed:{error}"),
+            )
+        }
     };
 
     let account = match vault.devnet_account() {
         Ok(account) => account,
-        Err(error) => return java_string(env, &format!("address-derivation-failed:{error}")),
+        Err(error) => {
+            return java_string(
+                env,
+                &format!("address-derivation-failed:{error}"),
+            )
+        }
     };
 
     let vault_json = match vault.to_json() {
         Ok(encoded) => encoded,
-        Err(error) => return java_string(env, &format!("vault-serialization-failed:{error}")),
+        Err(error) => {
+            return java_string(
+                env,
+                &format!("vault-serialization-failed:{error}"),
+            )
+        }
     };
 
     let result = format!(
@@ -148,12 +166,22 @@ pub extern "system" fn Java_com_routalk_scoutoperator_NativeBridge_lockedVaultDe
 
     let vault = match LockedVault::from_json(&vault_json) {
         Ok(vault) => vault,
-        Err(error) => return java_string(env, &format!("vault-parse-failed:{error}")),
+        Err(error) => {
+            return java_string(
+                env,
+                &format!("vault-parse-failed:{error}"),
+            )
+        }
     };
 
     let account = match vault.devnet_account() {
         Ok(account) => account,
-        Err(error) => return java_string(env, &format!("address-derivation-failed:{error}")),
+        Err(error) => {
+            return java_string(
+                env,
+                &format!("address-derivation-failed:{error}"),
+            )
+        }
     };
 
     java_string(env, &format!("ok:{}", account.address()))
@@ -177,12 +205,22 @@ pub extern "system" fn Java_com_routalk_scoutoperator_NativeBridge_lockedVaultDe
 
     let vault = match LockedVault::from_json(&vault_json) {
         Ok(vault) => vault,
-        Err(error) => return java_string(env, &format!("vault-parse-failed:{error}")),
+        Err(error) => {
+            return java_string(
+                env,
+                &format!("vault-parse-failed:{error}"),
+            )
+        }
     };
 
     let account = match vault.devnet_account() {
         Ok(account) => account,
-        Err(error) => return java_string(env, &format!("address-derivation-failed:{error}")),
+        Err(error) => {
+            return java_string(
+                env,
+                &format!("address-derivation-failed:{error}"),
+            )
+        }
     };
 
     let runtime = match Builder::new_current_thread().enable_all().build() {
@@ -246,6 +284,67 @@ pub extern "system" fn Java_com_routalk_scoutoperator_NativeBridge_lockedVaultDe
 
             java_string(env, &format!("ok:{history}"))
         }
-        Err(error) => java_string(env, &format!("history-failed:{error}")),
+        Err(error) => {
+            java_string(
+                env,
+                &format!("history-failed:{error}"),
+            )
+        }
+    }
+}
+
+#[allow(unsafe_code)]
+#[no_mangle]
+pub extern "system" fn Java_com_routalk_scoutoperator_NativeBridge_createLockedVaultBackup(
+    mut env: JNIEnv<'_>,
+    _class: JClass<'_>,
+    vault_json: JString<'_>,
+) -> jstring {
+    let vault_json: String = match env.get_string(&vault_json) {
+        Ok(value) => value.into(),
+        Err(_) => return java_string(env, "invalid-vault-json"),
+    };
+
+    match create_locked_vault_backup(&vault_json) {
+        Ok(backup_json) => {
+            java_string(env, &format!("ok:{backup_json}"))
+        }
+        Err(error) => {
+            java_string(
+                env,
+                &format!("backup-failed:{error}"),
+            )
+        }
+    }
+}
+
+#[allow(unsafe_code)]
+#[no_mangle]
+pub extern "system" fn Java_com_routalk_scoutoperator_NativeBridge_validateLockedVaultBackup(
+    mut env: JNIEnv<'_>,
+    _class: JClass<'_>,
+    backup_json: JString<'_>,
+) -> jstring {
+    let backup_json: String = match env.get_string(&backup_json) {
+        Ok(value) => value.into(),
+        Err(_) => return java_string(env, "invalid-backup-json"),
+    };
+
+    match validate_locked_vault_backup(&backup_json) {
+        Ok(validated) => {
+            java_string(
+                env,
+                &format!(
+                    "ok:{}",
+                    validated.public_address(),
+                ),
+            )
+        }
+        Err(error) => {
+            java_string(
+                env,
+                &format!("backup-validation-failed:{error}"),
+            )
+        }
     }
 }
