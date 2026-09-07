@@ -2,6 +2,7 @@
 
 mod account_history;
 
+use account_history::fetch_locked_vault_devnet_history;
 use jni::{
     objects::{JByteArray, JClass, JString},
     sys::jstring,
@@ -204,5 +205,46 @@ pub extern "system" fn Java_com_routalk_scoutoperator_NativeBridge_lockedVaultDe
             )
         }
         Err(error) => java_string(env, &format!("rpc-failed:{error}")),
+    }
+}
+
+#[allow(unsafe_code)]
+#[no_mangle]
+pub extern "system" fn Java_com_routalk_scoutoperator_NativeBridge_lockedVaultDevnetHistory(
+    mut env: JNIEnv<'_>,
+    _class: JClass<'_>,
+    vault_json: JString<'_>,
+) -> jstring {
+    let vault_json: String = match env.get_string(&vault_json) {
+        Ok(value) => value.into(),
+        Err(_) => return java_string(env, "invalid-vault-json"),
+    };
+
+    if vault_json.trim().is_empty() {
+        return java_string(env, "empty-vault-json");
+    }
+
+    let runtime = match Builder::new_current_thread().enable_all().build() {
+        Ok(runtime) => runtime,
+        Err(_) => return java_string(env, "runtime-initialization-failed"),
+    };
+
+    match runtime.block_on(fetch_locked_vault_devnet_history(&vault_json)) {
+        Ok(records) => {
+            let history = records
+                .iter()
+                .map(|record| {
+                    format!(
+                        "{}:{}",
+                        record.signature(),
+                        record.slot(),
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join(",");
+
+            java_string(env, &format!("ok:{history}"))
+        }
+        Err(error) => java_string(env, &format!("history-failed:{error}")),
     }
 }
