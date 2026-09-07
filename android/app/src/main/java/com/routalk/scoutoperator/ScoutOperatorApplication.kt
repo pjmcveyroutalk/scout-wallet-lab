@@ -24,7 +24,7 @@ internal class ScoutOperatorApplication : Application() {
                         return
                     }
 
-                    installManualUpdateControl(activity)
+                    installOperatorControls(activity)
 
                     if (updateCheckStarted) {
                         return
@@ -60,7 +60,7 @@ internal class ScoutOperatorApplication : Application() {
         )
     }
 
-    private fun installManualUpdateControl(
+    private fun installOperatorControls(
         activity: Activity,
     ) {
         val contentRoot =
@@ -68,6 +68,88 @@ internal class ScoutOperatorApplication : Application() {
                 android.R.id.content,
             )
 
+        installRecoveryControl(
+            activity = activity,
+            contentRoot = contentRoot,
+        )
+
+        installManualUpdateControl(
+            activity = activity,
+            contentRoot = contentRoot,
+        )
+    }
+
+    private fun installRecoveryControl(
+        activity: Activity,
+        contentRoot: FrameLayout,
+    ) {
+        if (
+            contentRoot.findViewWithTag<Button>(
+                RECOVERY_BUTTON_TAG,
+            ) != null
+        ) {
+            return
+        }
+
+        val margin =
+            (
+                CONTROL_MARGIN_DP *
+                    activity.resources.displayMetrics.density
+            ).toInt()
+
+        val bottomOffset =
+            (
+                RECOVERY_BOTTOM_OFFSET_DP *
+                    activity.resources.displayMetrics.density
+            ).toInt()
+
+        val button =
+            Button(activity).apply {
+                tag = RECOVERY_BUTTON_TAG
+                text = "RECOVERY / RESTORE"
+                contentDescription =
+                    "Open Scout encrypted Devnet recovery and restore"
+
+                setOnClickListener {
+                    isEnabled = false
+
+                    try {
+                        activity.startActivity(
+                            Intent(
+                                activity,
+                                LockedVaultRestoreActivity::class.java,
+                            ),
+                        )
+                    } catch (_: Throwable) {
+                        isEnabled = true
+                    }
+                }
+            }
+
+        val layoutParams =
+            FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                Gravity.END or Gravity.BOTTOM,
+            ).apply {
+                setMargins(
+                    margin,
+                    margin,
+                    margin,
+                    bottomOffset,
+                )
+            }
+
+        contentRoot.addView(
+            button,
+            layoutParams,
+        )
+    }
+
+    private fun installManualUpdateControl(
+        activity: Activity,
+        contentRoot: FrameLayout,
+    ) {
         if (
             contentRoot.findViewWithTag<Button>(
                 UPDATE_BUTTON_TAG,
@@ -78,7 +160,7 @@ internal class ScoutOperatorApplication : Application() {
 
         val margin =
             (
-                UPDATE_BUTTON_MARGIN_DP *
+                CONTROL_MARGIN_DP *
                     activity.resources.displayMetrics.density
             ).toInt()
 
@@ -323,6 +405,11 @@ internal class ScoutOperatorApplication : Application() {
         const val UPDATE_BUTTON_TAG =
             "scout-manual-update-control"
 
-        const val UPDATE_BUTTON_MARGIN_DP = 12
+        const val RECOVERY_BUTTON_TAG =
+            "scout-recovery-restore-control"
+
+        const val CONTROL_MARGIN_DP = 12
+
+        const val RECOVERY_BOTTOM_OFFSET_DP = 76
     }
 }
