@@ -55,7 +55,9 @@ internal class ScoutOperatorApplication : Application() {
         Thread {
             val result =
                 try {
-                    ScoutUpdateChecker.check(activity.applicationContext)
+                    ScoutUpdateChecker.check(
+                        activity.applicationContext,
+                    )
                 } catch (_: Throwable) {
                     null
                 }
@@ -63,11 +65,15 @@ internal class ScoutOperatorApplication : Application() {
             if (
                 result == null ||
                 !result.success ||
-                !result.updateAvailable ||
-                result.downloadUrl.isNullOrBlank()
+                !result.updateAvailable
             ) {
                 return@Thread
             }
+
+            val downloadUrl =
+                result.downloadUrl
+                    ?.takeIf { it.isNotBlank() }
+                    ?: return@Thread
 
             activity.runOnUiThread {
                 if (
@@ -80,6 +86,7 @@ internal class ScoutOperatorApplication : Application() {
                 showUpdateDialog(
                     activity = activity,
                     result = result,
+                    downloadUrl = downloadUrl,
                 )
             }
         }.start()
@@ -88,6 +95,7 @@ internal class ScoutOperatorApplication : Application() {
     private fun showUpdateDialog(
         activity: Activity,
         result: ScoutUpdateChecker.UpdateResult,
+        downloadUrl: String,
     ) {
         val latestVersion =
             result.latestVersionName
@@ -117,7 +125,8 @@ internal class ScoutOperatorApplication : Application() {
                     append(releaseIdentity)
                     append("\n\n")
                     append(
-                        "Updating does not modify or replace your stored encrypted wallet vault.",
+                        "Updating does not modify or replace " +
+                            "your stored encrypted wallet vault.",
                     )
                 },
             )
@@ -130,7 +139,7 @@ internal class ScoutOperatorApplication : Application() {
 
                 openUpdate(
                     activity = activity,
-                    downloadUrl = result.downloadUrl,
+                    downloadUrl = downloadUrl,
                 )
             }
             .show()
