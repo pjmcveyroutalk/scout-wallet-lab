@@ -1,6 +1,7 @@
 #![forbid(unsafe_code)]
 
 pub mod observability;
+pub mod recovery_words;
 
 use argon2::{Algorithm, Argon2, Params, Version};
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
@@ -701,6 +702,7 @@ pub enum VaultError {
     DecryptionFailed,
     PublicKeyMismatch,
     SerializationFailed,
+    RecoveryWordsFailed,
 }
 
 impl fmt::Display for VaultError {
@@ -714,6 +716,7 @@ impl fmt::Display for VaultError {
             Self::DecryptionFailed => "vault decryption failed",
             Self::PublicKeyMismatch => "vault public key does not match decrypted signing key",
             Self::SerializationFailed => "vault serialization failed",
+            Self::RecoveryWordsFailed => "emergency recovery words operation failed",
         };
         formatter.write_str(message)
     }
@@ -1080,6 +1083,28 @@ impl LockedVault {
         })
     }
 
+    pub fn export_emergency_recovery_words(
+        &self,
+        passphrase: &SecretPassphrase,
+    ) -> Result<recovery_words::RecoveryWords, VaultError> {
+        let unlocked = self.unlock(passphrase)?;
+        let signing_seed = Zeroizing::new(unlocked.signing_key.to_bytes());
+        let expected_public_key = Pubkey::new_from_array(self.public_key()?);
+
+        recovery_words::recovery_words_from_signing_seed(&signing_seed, expected_public_key)
+            .map_err(|_| VaultError::RecoveryWordsFailed)
+    }
+
+    pub fn restore_from_emergency_recovery_words(
+        passphrase: &SecretPassphrase,
+        words: &str,
+    ) -> Result<Self, VaultError> {
+        let signing_seed = recovery_words::signing_seed_from_recovery_words(words)
+            .map_err(|_| VaultError::RecoveryWordsFailed)?;
+
+        Self::seal_seed(passphrase, &signing_seed)
+    }
+
     pub fn public_key(&self) -> Result<[u8; 32], VaultError> {
         self.validate_metadata()?;
         decode_array::<32>(&self.public_key_b64)
@@ -1309,6 +1334,38 @@ mod tests {
         let second = LockedVault::import_seed(&passphrase, SecretSeed::new([7_u8; 32]))?;
 
         assert_eq!(first.public_key()?, second.public_key()?);
+        Ok(())
+    }
+
+    #[test]
+    fn emergency_recovery_words_are_passphrase_gated_and_restore_same_identity(
+    ) -> Result<(), VaultError> {
+        let original_passphrase = SecretPassphrase::new("recovery export passphrase".to_owned());
+        let wrong_passphrase = SecretPassphrase::new("wrong recovery passphrase".to_owned());
+        let restored_passphrase = SecretPassphrase::new("restored vault passphrase".to_owned());
+        let vault = LockedVault::import_seed(&original_passphrase, SecretSeed::new([17_u8; 32]))?;
+        let expected_public_key = vault.public_key()?;
+
+        assert!(matches!(
+            vault.export_emergency_recovery_words(&wrong_passphrase),
+            Err(VaultError::DecryptionFailed)
+        ));
+
+        let recovery_words = vault.export_emergency_recovery_words(&original_passphrase)?;
+        assert_eq!(recovery_words.words().split_whitespace().count(), 24);
+        assert_eq!(recovery_words.public_key().to_bytes(), expected_public_key);
+
+        let restored = LockedVault::restore_from_emergency_recovery_words(
+            &restored_passphrase,
+            recovery_words.words(),
+        )?;
+        assert_eq!(restored.public_key()?, expected_public_key);
+
+        let unlocked_restored = restored.unlock(&restored_passphrase)?;
+        assert_eq!(unlocked_restored.public_key(), expected_public_key);
+
+        let restored_json = restored.to_json()?;
+        assert!(!restored_json.contains(recovery_words.words()));
         Ok(())
     }
 
@@ -2053,3 +2110,4 @@ mod tests {
         Ok(())
     }
 }
+
