@@ -24,4 +24,8 @@ internal object NativeBridge {
     external fun lockedVaultDevnetBalance(vaultJson: String): String
 
     external fun lockedVaultDevnetHistory(vaultJson: String): String
+
+    external fun createLockedVaultBackup(vaultJson: String): String
+
+    external fun validateLockedVaultBackup(backupJson: String): String
 }
