@@ -4,6 +4,7 @@ import android.app.Activity
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 import android.text.InputType
@@ -24,6 +25,9 @@ import java.math.BigInteger
 class MainActivity : Activity() {
     private var passphraseField: EditText? = null
     private var confirmationField: EditText? = null
+    private var backupStatusView: TextView? = null
+    private var pendingBackupJson: String? = null
+    private var verifiedPublicAddress: String? = null
 
     private data class BridgeRuntimeState(
         val identity: String,
@@ -69,12 +73,23 @@ class MainActivity : Activity() {
 
         val padding = (24 * resources.displayMetrics.density).toInt()
 
-        fun text(value: String, size: Float): TextView =
+        fun text(
+            value: String,
+            size: Float,
+        ): TextView =
             TextView(this).apply {
                 this.text = value
                 textSize = size
                 setPadding(0, padding / 2, 0, padding / 2)
             }
+
+        fun fullWidth(button: Button) {
+            button.layoutParams =
+                ViewGroup.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                )
+        }
 
         fun securePassphraseField(
             hintText: String,
@@ -108,109 +123,15 @@ class MainActivity : Activity() {
                 setPadding(padding, padding, padding, padding)
             }
 
-        val bridgeRuntimeState =
-            try {
-                val identity = NativeBridge.engineName()
-                val status = NativeBridge.bridgeStatus()
-                val rpcCluster = NativeBridge.rpcCluster()
-                val rpcEndpoint = NativeBridge.rpcEndpoint()
-
-                BridgeRuntimeState(
-                    identity = identity,
-                    status = status,
-                    rpcCluster = rpcCluster,
-                    rpcEndpoint = rpcEndpoint,
-                    bridgeVerified =
-                        identity.isNotBlank() &&
-                            identity.endsWith(":devnet") &&
-                            status == "wallet-operations-locked",
-                    rpcVerified =
-                        rpcCluster == "devnet" &&
-                            rpcEndpoint == "https://api.devnet.solana.com",
-                )
-            } catch (error: Throwable) {
-                BridgeRuntimeState(
-                    identity = "Unavailable: ${error.javaClass.simpleName}",
-                    status = "bridge-load-failed",
-                    rpcCluster = "Unavailable",
-                    rpcEndpoint = "Unavailable",
-                    bridgeVerified = false,
-                    rpcVerified = false,
-                )
-            }
-
-        val vaultStorageState =
-            try {
-                val vaultStore = LockedVaultStore(this)
-
-                VaultStorageState(
-                    hasStoredEntry = vaultStore.hasVault(),
-                    lockedVaultJson = vaultStore.loadVault(),
-                )
-            } catch (_: Throwable) {
-                VaultStorageState(
-                    hasStoredEntry = false,
-                    lockedVaultJson = null,
-                )
-            }
-
+        val bridgeRuntimeState = loadBridgeRuntimeState()
+        val vaultStorageState = loadVaultStorageState()
         val vaultIdentityState =
-            if (
-                bridgeRuntimeState.bridgeVerified &&
-                vaultStorageState.hasReadableVault
-            ) {
-                try {
-                    val result =
-                        NativeBridge.lockedVaultDevnetAddress(
-                            vaultStorageState.lockedVaultJson.orEmpty(),
-                        )
+            loadVaultIdentityState(
+                bridgeRuntimeState = bridgeRuntimeState,
+                vaultStorageState = vaultStorageState,
+            )
 
-                    if (result.startsWith("ok:")) {
-                        val address = result.removePrefix("ok:")
-
-                        if (address.isNotBlank()) {
-                            VaultIdentityState(
-                                verified = true,
-                                address = address,
-                                status = "VERIFIED — DEVNET PUBLIC IDENTITY",
-                            )
-                        } else {
-                            VaultIdentityState(
-                                verified = false,
-                                address = null,
-                                status = "NOT VERIFIED — EMPTY ADDRESS",
-                            )
-                        }
-                    } else {
-                        VaultIdentityState(
-                            verified = false,
-                            address = null,
-                            status = "NOT VERIFIED — $result",
-                        )
-                    }
-                } catch (error: Throwable) {
-                    VaultIdentityState(
-                        verified = false,
-                        address = null,
-                        status =
-                            "NOT VERIFIED — bridge-call-failed:" +
-                                error.javaClass.simpleName,
-                    )
-                }
-            } else {
-                VaultIdentityState(
-                    verified = false,
-                    address = null,
-                    status =
-                        if (vaultStorageState.hasReadableVault) {
-                            "NOT VERIFIED — RUST BRIDGE UNAVAILABLE"
-                        } else {
-                            "NOT VERIFIED — NO VAULT"
-                        },
-                )
-            }
-
-        var verifiedPublicAddress =
+        verifiedPublicAddress =
             vaultIdentityState.address
                 ?.takeIf {
                     vaultIdentityState.verified &&
@@ -271,6 +192,9 @@ class MainActivity : Activity() {
                     "Perform read-only Solana Devnet network health check"
             }
 
+        fullWidth(checkDevnet)
+        root.addView(checkDevnet)
+
         checkDevnet.setOnClickListener {
             checkDevnet.isEnabled = false
             networkStatus.text = "CHECKING DEVNET..."
@@ -284,15 +208,13 @@ class MainActivity : Activity() {
                     }
 
                 runOnUiThread {
-                    if (result.startsWith("ok:")) {
-                        val blockHeight = result.removePrefix("ok:")
-                        networkStatus.text =
-                            "VERIFIED — DEVNET LIVE\n" +
-                                "Block height: $blockHeight"
-                    } else {
-                        networkStatus.text =
+                    networkStatus.text =
+                        if (result.startsWith("ok:")) {
+                            val blockHeight = result.removePrefix("ok:")
+                            "VERIFIED — DEVNET LIVE\nBlock height: $blockHeight"
+                        } else {
                             "DEVNET CHECK FAILED\n$result"
-                    }
+                        }
 
                     checkDevnet.isEnabled =
                         bridgeRuntimeState.bridgeVerified &&
@@ -300,14 +222,6 @@ class MainActivity : Activity() {
                 }
             }.start()
         }
-
-        root.addView(
-            checkDevnet,
-            ViewGroup.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-            ),
-        )
 
         root.addView(text("Wallet storage", 14f))
 
@@ -402,13 +316,8 @@ class MainActivity : Activity() {
                     "Create encrypted Scout Devnet wallet"
             }
 
-        root.addView(
-            createWallet,
-            ViewGroup.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-            ),
-        )
+        fullWidth(createWallet)
+        root.addView(createWallet)
 
         root.addView(text("Address", 14f))
 
@@ -428,6 +337,9 @@ class MainActivity : Activity() {
                     "Copy verified Scout Devnet public wallet address"
             }
 
+        fullWidth(copyAddress)
+        root.addView(copyAddress)
+
         copyAddress.setOnClickListener {
             val address = verifiedPublicAddress
 
@@ -444,13 +356,12 @@ class MainActivity : Activity() {
                 getSystemService(Context.CLIPBOARD_SERVICE)
                     as ClipboardManager
 
-            val clip =
+            clipboard.setPrimaryClip(
                 ClipData.newPlainText(
                     "Scout Devnet public address",
                     address,
-                )
-
-            clipboard.setPrimaryClip(clip)
+                ),
+            )
 
             Toast.makeText(
                 this,
@@ -458,14 +369,6 @@ class MainActivity : Activity() {
                 Toast.LENGTH_SHORT,
             ).show()
         }
-
-        root.addView(
-            copyAddress,
-            ViewGroup.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-            ),
-        )
 
         root.addView(text("Identity", 14f))
 
@@ -502,6 +405,9 @@ class MainActivity : Activity() {
                     "Refresh verified Scout Devnet wallet balance using read-only RPC"
             }
 
+        fullWidth(refreshBalance)
+        root.addView(refreshBalance)
+
         refreshBalance.setOnClickListener {
             val expectedAddress = verifiedPublicAddress
 
@@ -531,14 +437,14 @@ class MainActivity : Activity() {
                     }
 
                 runOnUiThread {
-                    if (balanceResult.success) {
-                        balanceStatus.text =
+                    balanceStatus.text =
+                        if (balanceResult.success) {
                             "VERIFIED — DEVNET BALANCE\n" +
                                 "${balanceResult.sol} SOL\n" +
                                 "${balanceResult.lamports} lamports"
-                    } else {
-                        balanceStatus.text = balanceResult.status
-                    }
+                        } else {
+                            balanceResult.status
+                        }
 
                     refreshBalance.isEnabled =
                         bridgeRuntimeState.bridgeVerified &&
@@ -547,14 +453,6 @@ class MainActivity : Activity() {
                 }
             }.start()
         }
-
-        root.addView(
-            refreshBalance,
-            ViewGroup.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-            ),
-        )
 
         root.addView(text("Account history", 14f))
 
@@ -582,6 +480,9 @@ class MainActivity : Activity() {
                     "Refresh up to ten Scout Devnet account history records using read-only RPC"
             }
 
+        fullWidth(refreshHistory)
+        root.addView(refreshHistory)
+
         refreshHistory.setOnClickListener {
             val expectedAddress = verifiedPublicAddress
 
@@ -593,7 +494,8 @@ class MainActivity : Activity() {
             }
 
             refreshHistory.isEnabled = false
-            historyStatus.text = "REFRESHING DEVNET HISTORY — READ ONLY..."
+            historyStatus.text =
+                "REFRESHING DEVNET HISTORY — READ ONLY..."
 
             Thread {
                 val historyResult =
@@ -613,8 +515,8 @@ class MainActivity : Activity() {
                     }
 
                 runOnUiThread {
-                    if (historyResult.success) {
-                        historyStatus.text =
+                    historyStatus.text =
+                        if (historyResult.success) {
                             if (historyResult.records.isEmpty()) {
                                 historyResult.status
                             } else {
@@ -636,9 +538,9 @@ class MainActivity : Activity() {
                                         }
                                 }
                             }
-                    } else {
-                        historyStatus.text = historyResult.status
-                    }
+                        } else {
+                            historyResult.status
+                        }
 
                     refreshHistory.isEnabled =
                         bridgeRuntimeState.bridgeVerified &&
@@ -648,13 +550,147 @@ class MainActivity : Activity() {
             }.start()
         }
 
+        root.addView(text("Recovery / backup", 14f))
+
+        val backupStatus =
+            text(
+                if (vaultIdentityState.verified) {
+                    "READY — ENCRYPTED BACKUP ONLY"
+                } else {
+                    "Unavailable"
+                },
+                16f,
+            )
+
+        backupStatusView = backupStatus
+        root.addView(backupStatus)
+
+        val exportBackup =
+            Button(this).apply {
+                text = "EXPORT ENCRYPTED BACKUP"
+                isEnabled =
+                    bridgeRuntimeState.bridgeVerified &&
+                        vaultStorageState.hasReadableVault &&
+                        verifiedPublicAddress != null
+                contentDescription =
+                    "Export encrypted Scout Devnet locked vault backup"
+            }
+
+        fullWidth(exportBackup)
+        root.addView(exportBackup)
+
+        val validateBackup =
+            Button(this).apply {
+                text = "IMPORT + VALIDATE BACKUP"
+                isEnabled =
+                    bridgeRuntimeState.bridgeVerified &&
+                        verifiedPublicAddress != null
+                contentDescription =
+                    "Import and validate encrypted Scout Devnet backup without restoring it"
+            }
+
+        fullWidth(validateBackup)
+        root.addView(validateBackup)
+
         root.addView(
-            refreshHistory,
-            ViewGroup.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT,
+            text(
+                "RESTORE — DISABLED UNTIL VERIFIED BACKUP PROOF",
+                14f,
             ),
         )
+
+        exportBackup.setOnClickListener {
+            val expectedAddress = verifiedPublicAddress
+
+            if (expectedAddress.isNullOrBlank()) {
+                backupStatus.text =
+                    "BACKUP BLOCKED — VERIFIED IDENTITY MISSING"
+                exportBackup.isEnabled = false
+                return@setOnClickListener
+            }
+
+            exportBackup.isEnabled = false
+            validateBackup.isEnabled = false
+            backupStatus.text =
+                "CREATING + VALIDATING ENCRYPTED DEVNET BACKUP..."
+
+            Thread {
+                val result =
+                    try {
+                        LockedVaultBackupManager.create(
+                            context = this,
+                            expectedAddress = expectedAddress,
+                        )
+                    } catch (error: Throwable) {
+                        LockedVaultBackupManager.BackupResult(
+                            success = false,
+                            publicAddress = null,
+                            backupJson = null,
+                            status =
+                                "BACKUP FAILED — " +
+                                    error.javaClass.simpleName,
+                        )
+                    }
+
+                runOnUiThread {
+                    if (
+                        result.success &&
+                        !result.backupJson.isNullOrBlank()
+                    ) {
+                        pendingBackupJson = result.backupJson
+                        backupStatus.text =
+                            "VERIFIED — CHOOSE BACKUP DESTINATION"
+
+                        try {
+                            startActivityForResult(
+                                LockedVaultBackupFileIO.createExportIntent(),
+                                REQUEST_EXPORT_BACKUP,
+                            )
+                        } catch (error: Throwable) {
+                            pendingBackupJson = null
+                            backupStatus.text =
+                                "BACKUP EXPORT FAILED — " +
+                                    error.javaClass.simpleName
+                            exportBackup.isEnabled =
+                                verifiedPublicAddress != null
+                            validateBackup.isEnabled =
+                                verifiedPublicAddress != null
+                        }
+                    } else {
+                        pendingBackupJson = null
+                        backupStatus.text = result.status
+                        exportBackup.isEnabled =
+                            verifiedPublicAddress != null
+                        validateBackup.isEnabled =
+                            verifiedPublicAddress != null
+                    }
+                }
+            }.start()
+        }
+
+        validateBackup.setOnClickListener {
+            if (verifiedPublicAddress.isNullOrBlank()) {
+                backupStatus.text =
+                    "BACKUP VALIDATION BLOCKED — VERIFIED IDENTITY MISSING"
+                validateBackup.isEnabled = false
+                return@setOnClickListener
+            }
+
+            pendingBackupJson = null
+            backupStatus.text =
+                "CHOOSE ENCRYPTED DEVNET BACKUP TO VALIDATE"
+
+            try {
+                startActivityForResult(
+                    LockedVaultBackupFileIO.createImportIntent(),
+                    REQUEST_IMPORT_BACKUP,
+                )
+            } catch (error: Throwable) {
+                backupStatus.text =
+                    "BACKUP IMPORT FAILED — " +
+                        error.javaClass.simpleName
+            }
+        }
 
         root.addView(text("MAINNET — DISABLED", 14f))
         root.addView(text("TRANSACTION SUBMISSION — DISABLED", 14f))
@@ -744,7 +780,8 @@ class MainActivity : Activity() {
                             clearSensitiveFields()
 
                             if (creationResult.success) {
-                                val createdAddress = creationResult.address
+                                val createdAddress =
+                                    creationResult.address
 
                                 storageStatus.text =
                                     "VERIFIED — ENCRYPTED VAULT STORED"
@@ -767,6 +804,8 @@ class MainActivity : Activity() {
                                 balanceStatus.text = "NOT CHECKED"
                                 historyStatus.text =
                                     "NOT CHECKED — READ ONLY"
+                                backupStatus.text =
+                                    "READY — ENCRYPTED BACKUP ONLY"
 
                                 refreshBalance.isEnabled =
                                     bridgeRuntimeState.bridgeVerified &&
@@ -778,6 +817,14 @@ class MainActivity : Activity() {
                                         bridgeRuntimeState.rpcVerified &&
                                         verifiedPublicAddress != null
 
+                                exportBackup.isEnabled =
+                                    bridgeRuntimeState.bridgeVerified &&
+                                        verifiedPublicAddress != null
+
+                                validateBackup.isEnabled =
+                                    bridgeRuntimeState.bridgeVerified &&
+                                        verifiedPublicAddress != null
+
                                 createWallet.isEnabled = false
                                 passphrase.isEnabled = false
                                 confirmation.isEnabled = false
@@ -786,10 +833,14 @@ class MainActivity : Activity() {
                                 copyAddress.isEnabled = false
                                 refreshBalance.isEnabled = false
                                 refreshHistory.isEnabled = false
+                                exportBackup.isEnabled = false
+                                validateBackup.isEnabled = false
 
                                 balanceStatus.text = "Unavailable"
                                 historyStatus.text = "Unavailable"
-                                creationStatus.text = creationResult.status
+                                backupStatus.text = "Unavailable"
+                                creationStatus.text =
+                                    creationResult.status
 
                                 createWallet.isEnabled =
                                     creationResult.retryAllowed &&
@@ -808,6 +859,33 @@ class MainActivity : Activity() {
         }
     }
 
+    @Deprecated("Deprecated in Android API; retained for current Activity result boundary.")
+    override fun onActivityResult(
+        requestCode: Int,
+        resultCode: Int,
+        data: Intent?,
+    ) {
+        super.onActivityResult(
+            requestCode,
+            resultCode,
+            data,
+        )
+
+        when (requestCode) {
+            REQUEST_EXPORT_BACKUP ->
+                handleBackupExportResult(
+                    resultCode = resultCode,
+                    data = data,
+                )
+
+            REQUEST_IMPORT_BACKUP ->
+                handleBackupImportResult(
+                    resultCode = resultCode,
+                    data = data,
+                )
+        }
+    }
+
     override fun onStop() {
         clearSensitiveFields()
         super.onStop()
@@ -816,10 +894,250 @@ class MainActivity : Activity() {
     override fun onDestroy() {
         clearSensitiveFields()
 
+        pendingBackupJson = null
+        verifiedPublicAddress = null
+        backupStatusView = null
         passphraseField = null
         confirmationField = null
 
         super.onDestroy()
+    }
+
+    private fun handleBackupExportResult(
+        resultCode: Int,
+        data: Intent?,
+    ) {
+        val backupStatus = backupStatusView ?: return
+
+        if (resultCode != RESULT_OK) {
+            pendingBackupJson = null
+            backupStatus.text = "BACKUP EXPORT CANCELED"
+            return
+        }
+
+        val destination =
+            data?.data
+                ?: run {
+                    pendingBackupJson = null
+                    backupStatus.text =
+                        "BACKUP EXPORT FAILED — DESTINATION MISSING"
+                    return
+                }
+
+        val backupJson =
+            pendingBackupJson
+                ?: run {
+                    backupStatus.text =
+                        "BACKUP EXPORT FAILED — PACKAGE NOT AVAILABLE"
+                    return
+                }
+
+        pendingBackupJson = null
+        backupStatus.text = "WRITING ENCRYPTED DEVNET BACKUP..."
+
+        Thread {
+            val result =
+                LockedVaultBackupFileIO.writeBackup(
+                    contentResolver = contentResolver,
+                    destination = destination,
+                    backupJson = backupJson,
+                )
+
+            runOnUiThread {
+                backupStatus.text = result.status
+            }
+        }.start()
+    }
+
+    private fun handleBackupImportResult(
+        resultCode: Int,
+        data: Intent?,
+    ) {
+        val backupStatus = backupStatusView ?: return
+
+        if (resultCode != RESULT_OK) {
+            backupStatus.text = "BACKUP VALIDATION CANCELED"
+            return
+        }
+
+        val source =
+            data?.data
+                ?: run {
+                    backupStatus.text =
+                        "BACKUP IMPORT FAILED — SOURCE MISSING"
+                    return
+                }
+
+        val expectedAddress =
+            verifiedPublicAddress
+                ?: run {
+                    backupStatus.text =
+                        "BACKUP VALIDATION BLOCKED — VERIFIED IDENTITY MISSING"
+                    return
+                }
+
+        backupStatus.text =
+            "READING + VALIDATING ENCRYPTED DEVNET BACKUP..."
+
+        Thread {
+            val fileResult =
+                LockedVaultBackupFileIO.readBackup(
+                    contentResolver = contentResolver,
+                    source = source,
+                )
+
+            if (!fileResult.success) {
+                runOnUiThread {
+                    backupStatus.text = fileResult.status
+                }
+                return@Thread
+            }
+
+            val backupJson =
+                fileResult.content
+                    ?: run {
+                        runOnUiThread {
+                            backupStatus.text =
+                                "BACKUP VALIDATION FAILED — PACKAGE MISSING"
+                        }
+                        return@Thread
+                    }
+
+            val validationResult =
+                try {
+                    LockedVaultBackupManager.validate(
+                        backupJson = backupJson,
+                        expectedAddress = expectedAddress,
+                    )
+                } catch (error: Throwable) {
+                    LockedVaultBackupManager.BackupResult(
+                        success = false,
+                        publicAddress = null,
+                        backupJson = null,
+                        status =
+                            "BACKUP VALIDATION FAILED — " +
+                                error.javaClass.simpleName,
+                    )
+                }
+
+            runOnUiThread {
+                backupStatus.text =
+                    if (validationResult.success) {
+                        validationResult.status +
+                            "\nRESTORE NOT PERFORMED"
+                    } else {
+                        validationResult.status
+                    }
+            }
+        }.start()
+    }
+
+    private fun loadBridgeRuntimeState(): BridgeRuntimeState =
+        try {
+            val identity = NativeBridge.engineName()
+            val status = NativeBridge.bridgeStatus()
+            val rpcCluster = NativeBridge.rpcCluster()
+            val rpcEndpoint = NativeBridge.rpcEndpoint()
+
+            BridgeRuntimeState(
+                identity = identity,
+                status = status,
+                rpcCluster = rpcCluster,
+                rpcEndpoint = rpcEndpoint,
+                bridgeVerified =
+                    identity.isNotBlank() &&
+                        identity.endsWith(":devnet") &&
+                        status == "wallet-operations-locked",
+                rpcVerified =
+                    rpcCluster == "devnet" &&
+                        rpcEndpoint == "https://api.devnet.solana.com",
+            )
+        } catch (error: Throwable) {
+            BridgeRuntimeState(
+                identity =
+                    "Unavailable: ${error.javaClass.simpleName}",
+                status = "bridge-load-failed",
+                rpcCluster = "Unavailable",
+                rpcEndpoint = "Unavailable",
+                bridgeVerified = false,
+                rpcVerified = false,
+            )
+        }
+
+    private fun loadVaultStorageState(): VaultStorageState =
+        try {
+            val vaultStore = LockedVaultStore(this)
+
+            VaultStorageState(
+                hasStoredEntry = vaultStore.hasVault(),
+                lockedVaultJson = vaultStore.loadVault(),
+            )
+        } catch (_: Throwable) {
+            VaultStorageState(
+                hasStoredEntry = false,
+                lockedVaultJson = null,
+            )
+        }
+
+    private fun loadVaultIdentityState(
+        bridgeRuntimeState: BridgeRuntimeState,
+        vaultStorageState: VaultStorageState,
+    ): VaultIdentityState {
+        if (
+            !bridgeRuntimeState.bridgeVerified ||
+            !vaultStorageState.hasReadableVault
+        ) {
+            return VaultIdentityState(
+                verified = false,
+                address = null,
+                status =
+                    if (vaultStorageState.hasReadableVault) {
+                        "NOT VERIFIED — RUST BRIDGE UNAVAILABLE"
+                    } else {
+                        "NOT VERIFIED — NO VAULT"
+                    },
+            )
+        }
+
+        return try {
+            val result =
+                NativeBridge.lockedVaultDevnetAddress(
+                    vaultStorageState.lockedVaultJson.orEmpty(),
+                )
+
+            if (!result.startsWith("ok:")) {
+                VaultIdentityState(
+                    verified = false,
+                    address = null,
+                    status = "NOT VERIFIED — $result",
+                )
+            } else {
+                val address = result.removePrefix("ok:")
+
+                if (address.isBlank()) {
+                    VaultIdentityState(
+                        verified = false,
+                        address = null,
+                        status = "NOT VERIFIED — EMPTY ADDRESS",
+                    )
+                } else {
+                    VaultIdentityState(
+                        verified = true,
+                        address = address,
+                        status =
+                            "VERIFIED — DEVNET PUBLIC IDENTITY",
+                    )
+                }
+            }
+        } catch (error: Throwable) {
+            VaultIdentityState(
+                verified = false,
+                address = null,
+                status =
+                    "NOT VERIFIED — bridge-call-failed:" +
+                        error.javaClass.simpleName,
+            )
+        }
     }
 
     private fun refreshVerifiedBalance(
@@ -1125,6 +1443,11 @@ class MainActivity : Activity() {
     private fun clearSensitiveFields() {
         passphraseField?.text?.clear()
         confirmationField?.text?.clear()
+    }
+
+    private companion object {
+        const val REQUEST_EXPORT_BACKUP = 4101
+        const val REQUEST_IMPORT_BACKUP = 4102
     }
 }
 
