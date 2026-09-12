@@ -1,0 +1,30 @@
+name: Stage F-B Read-Only Readiness Audit
+
+on:
+  pull_request:
+    paths:
+      - "android/app/src/main/java/com/routalk/scoutoperator/StageFBGateActivity.kt"
+      - "android/app/src/main/java/com/routalk/scoutoperator/StageFBReadOnlyResolution.kt"
+      - "scripts/stage-fb-readiness-static-audit.sh"
+      - ".github/workflows/stage-fb-readiness-audit.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "android/app/src/main/java/com/routalk/scoutoperator/StageFBGateActivity.kt"
+      - "android/app/src/main/java/com/routalk/scoutoperator/StageFBReadOnlyResolution.kt"
+      - "scripts/stage-fb-readiness-static-audit.sh"
+      - ".github/workflows/stage-fb-readiness-audit.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Run Stage F-B read-only readiness audit
+        run: bash scripts/stage-fb-readiness-static-audit.sh
