@@ -17,6 +17,10 @@
             android:exported="false" />
 
         <activity
+            android:name=".StageFPresubmitActivity"
+            android:exported="false" />
+
+        <activity
             android:name=".StageEPreflightActivity"
             android:exported="false" />
 
