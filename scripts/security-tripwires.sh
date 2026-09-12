@@ -9,6 +9,8 @@ readonly ANDROID_NATIVE_PATH="android/native/src/lib.rs"
 readonly ANDROID_BRIDGE_PATH="android/app/src/main/java/com/routalk/scoutoperator/NativeBridge.kt"
 readonly CREDENTIAL_RECOVERY_NATIVE_PATH="android/native/src/credential_recovery.rs"
 readonly CREDENTIAL_RECOVERY_ACTIVITY_PATH="android/app/src/main/java/com/routalk/scoutoperator/CredentialRecoveryActivity.kt"
+readonly CREDENTIAL_REKEY_NATIVE_PATH="android/native/src/credential_rekey.rs"
+readonly CREDENTIAL_REKEY_ACTIVITY_PATH="android/app/src/main/java/com/routalk/scoutoperator/CredentialRekeyActivity.kt"
 readonly ANDROID_MANIFEST_PATH="android/app/src/main/AndroidManifest.xml"
 readonly SIGNING_DESIGN_DOC="docs/DEVNET_SIGNING_BOUNDARY_V1.md"
 
@@ -234,6 +236,38 @@ assert_absent_in_path \
   "restore_from_emergency_recovery_words" \
   "${CREDENTIAL_RECOVERY_NATIVE_PATH}" \
   "credential recovery verification gate must not restore or replace a vault"
+
+echo "Checking credential re-key boundary..."
+
+assert_present_in_path \
+  "rekeyLockedDevnetVault" \
+  "${ANDROID_BRIDGE_PATH}" \
+  "narrow Android passphrase re-key request is missing"
+
+assert_present_in_path \
+  "NativeBridge_rekeyLockedDevnetVault" \
+  "${CREDENTIAL_REKEY_NATIVE_PATH}" \
+  "isolated JNI passphrase re-key export is missing"
+
+assert_present_in_path \
+  "restore_from_emergency_recovery_words" \
+  "${CREDENTIAL_REKEY_NATIVE_PATH}" \
+  "identity-preserving local re-seal path is missing"
+
+assert_present_in_path \
+  "NO SIGNING • NO TRANSACTION • NO MAINNET" \
+  "${CREDENTIAL_REKEY_ACTIVITY_PATH}" \
+  "credential re-key safety statement is missing"
+
+assert_absent_in_path \
+  "signStageCDevnetProof" \
+  "${CREDENTIAL_REKEY_ACTIVITY_PATH}" \
+  "credential re-key activity must not invoke signing"
+
+assert_absent_in_path \
+  "createLockedDevnetVault" \
+  "${CREDENTIAL_REKEY_ACTIVITY_PATH}" \
+  "credential re-key activity must not create a new wallet"
 
 echo "Checking Vercel trust boundary..."
 

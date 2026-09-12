@@ -27,10 +27,78 @@ internal class LockedVaultStore(context: Context) {
             .commit()
     }
 
+    fun prepareRekeyReplacement(
+        expectedCurrentVaultJson: String,
+        replacementVaultJson: String,
+    ): Boolean {
+        if (
+            !looksLikeLockedVaultJson(expectedCurrentVaultJson) ||
+            !looksLikeLockedVaultJson(replacementVaultJson)
+        ) {
+            return false
+        }
+
+        val currentVaultJson = loadVault() ?: return false
+
+        if (currentVaultJson != expectedCurrentVaultJson) {
+            return false
+        }
+
+        return preferences
+            .edit()
+            .putString(KEY_REKEY_ROLLBACK_VAULT, currentVaultJson)
+            .putString(KEY_LOCKED_VAULT, replacementVaultJson)
+            .commit()
+    }
+
+    fun rollbackRekey(expectedReplacementVaultJson: String): Boolean {
+        if (!looksLikeLockedVaultJson(expectedReplacementVaultJson)) {
+            return false
+        }
+
+        val currentVaultJson = loadVault() ?: return false
+        val rollbackVaultJson =
+            preferences
+                .getString(KEY_REKEY_ROLLBACK_VAULT, null)
+                ?.takeIf { it.isNotBlank() }
+                ?: return false
+
+        if (
+            currentVaultJson != expectedReplacementVaultJson ||
+            !looksLikeLockedVaultJson(rollbackVaultJson)
+        ) {
+            return false
+        }
+
+        return preferences
+            .edit()
+            .putString(KEY_LOCKED_VAULT, rollbackVaultJson)
+            .remove(KEY_REKEY_ROLLBACK_VAULT)
+            .commit()
+    }
+
+    fun finalizeRekey(expectedReplacementVaultJson: String): Boolean {
+        if (!looksLikeLockedVaultJson(expectedReplacementVaultJson)) {
+            return false
+        }
+
+        val currentVaultJson = loadVault() ?: return false
+
+        if (currentVaultJson != expectedReplacementVaultJson) {
+            return false
+        }
+
+        return preferences
+            .edit()
+            .remove(KEY_REKEY_ROLLBACK_VAULT)
+            .commit()
+    }
+
     fun clearVault(): Boolean =
         preferences
             .edit()
             .remove(KEY_LOCKED_VAULT)
+            .remove(KEY_REKEY_ROLLBACK_VAULT)
             .commit()
 
     private fun looksLikeLockedVaultJson(value: String): Boolean {
@@ -49,5 +117,6 @@ internal class LockedVaultStore(context: Context) {
     private companion object {
         const val PREFERENCES_NAME = "scout_locked_vault"
         const val KEY_LOCKED_VAULT = "locked_vault_json"
+        const val KEY_REKEY_ROLLBACK_VAULT = "rekey_rollback_vault_json"
     }
 }
