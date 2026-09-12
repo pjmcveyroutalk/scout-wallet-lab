@@ -19,6 +19,37 @@ class StageFBPublicReviewSnapshotTest {
     }
 
     @Test
+    fun publicPresubmitFieldsProduceSameSnapshotWithoutCandidateToken() {
+        val candidate = validCandidate()
+        val fromCandidate = StageFBPublicReviewSnapshot.create(candidate)
+        val fromPublicFields = validPublicPresubmitSnapshot()
+
+        assertTrue(fromCandidate is StageFBPublicReviewSnapshot.Result.Valid)
+        assertTrue(fromPublicFields is StageFBPublicReviewSnapshot.Result.Valid)
+        fromCandidate as StageFBPublicReviewSnapshot.Result.Valid
+        fromPublicFields as StageFBPublicReviewSnapshot.Result.Valid
+        assertEquals(fromCandidate.snapshot, fromPublicFields.snapshot)
+    }
+
+    @Test
+    fun malformedPublicSignatureHexFailsClosed() {
+        val result =
+            StageFBPublicReviewSnapshot.createFromPublicPresubmit(
+                scoutPublicKey = "1".repeat(32),
+                signatureHex = "AB".repeat(64),
+                recentBlockhash = "1".repeat(32),
+                feeLamports = 5_000L,
+                balanceLamports = 2_000_000L,
+                remainingBalanceLamports = 1_995_000L,
+                simulationSlot = 100L,
+                unitsConsumed = 321L,
+                lastValidBlockHeight = 200L,
+            )
+
+        assertTrue(result is StageFBPublicReviewSnapshot.Result.Invalid)
+    }
+
+    @Test
     fun tamperedFingerprintFailsClosed() {
         val candidate = validCandidate()
         val result =
@@ -70,6 +101,19 @@ class StageFBPublicReviewSnapshotTest {
         require(result is StageFBPreparedCandidate.Result.Valid)
         return result.candidate
     }
+
+    private fun validPublicPresubmitSnapshot(): StageFBPublicReviewSnapshot.Result =
+        StageFBPublicReviewSnapshot.createFromPublicPresubmit(
+            scoutPublicKey = "1".repeat(32),
+            signatureHex = "01".repeat(64),
+            recentBlockhash = "1".repeat(32),
+            feeLamports = 5_000L,
+            balanceLamports = 2_000_000L,
+            remainingBalanceLamports = 1_995_000L,
+            simulationSlot = 100L,
+            unitsConsumed = 321L,
+            lastValidBlockHeight = 200L,
+        )
 
     private fun differentSha256(value: String): String {
         val replacement = if (value.first() == '0') '1' else '0'
