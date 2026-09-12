@@ -191,12 +191,9 @@ internal class StageFBAttemptGuard(context: Context) {
                     next == PublicStatus.EXPIRED
 
             PublicStatus.PROCESSED ->
-                next == PublicStatus.CONFIRMED ||
-                    next == PublicStatus.FINALIZED ||
-                    next == PublicStatus.FAILED
+                next == PublicStatus.CONFIRMED || next == PublicStatus.FINALIZED
 
-            PublicStatus.CONFIRMED ->
-                next == PublicStatus.FINALIZED || next == PublicStatus.FAILED
+            PublicStatus.CONFIRMED -> next == PublicStatus.FINALIZED
 
             PublicStatus.FINALIZED,
             PublicStatus.FAILED,
@@ -206,7 +203,7 @@ internal class StageFBAttemptGuard(context: Context) {
     }
 
     private fun parseStatus(value: String): PublicStatus? =
-        PublicStatus.entries.firstOrNull { status -> status.name == value }
+        PublicStatus.values().firstOrNull { status -> status.name == value }
 
     private fun isValidPublicSignature(value: String): Boolean {
         if (value.length !in MIN_SIGNATURE_LENGTH..MAX_SIGNATURE_LENGTH) {
