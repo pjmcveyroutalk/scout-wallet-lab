@@ -13,6 +13,7 @@ internal object NativeBridge {
     external fun rpcEndpoint(): String
     external fun devnetBlockHeight(): String
     external fun signStageCDevnetProof(vaultJson: String, passphraseBytes: ByteArray): String
+    external fun simulateStageEDevnetProof(vaultJson: String, passphraseBytes: ByteArray): String
     external fun createLockedDevnetVault(passphraseBytes: ByteArray): String
     external fun verifyLockedDevnetPassphrase(vaultJson: String, passphraseBytes: ByteArray): String
     external fun rekeyLockedDevnetVault(

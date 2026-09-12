@@ -17,6 +17,10 @@
             android:exported="false" />
 
         <activity
+            android:name=".StageEPreflightActivity"
+            android:exported="false" />
+
+        <activity
             android:name=".StageDProofActivity"
             android:exported="false" />
 

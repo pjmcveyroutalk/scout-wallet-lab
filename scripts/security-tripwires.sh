@@ -4,14 +4,17 @@ set -euo pipefail
 readonly REPO_ROOT="$(git rev-parse --show-toplevel)"
 readonly EXPORTER_PATH="crates/wallet-engine/src/bin/export_observability.rs"
 readonly SIGNING_COORDINATOR_PATH="crates/wallet-engine/src/devnet_signing_coordinator.rs"
+readonly STAGE_E_CORE_PATH="crates/wallet-engine/src/stage_e_preflight.rs"
 readonly SIGNING_MODULE_PATH="crates/wallet-engine/src/recovery_words.rs"
 readonly ANDROID_NATIVE_PATH="android/native/src/lib.rs"
+readonly STAGE_E_NATIVE_PATH="android/native/src/stage_e_preflight.rs"
 readonly ANDROID_BRIDGE_PATH="android/app/src/main/java/com/routalk/scoutoperator/NativeBridge.kt"
 readonly CREDENTIAL_RECOVERY_NATIVE_PATH="android/native/src/credential_recovery.rs"
 readonly CREDENTIAL_RECOVERY_ACTIVITY_PATH="android/app/src/main/java/com/routalk/scoutoperator/CredentialRecoveryActivity.kt"
 readonly CREDENTIAL_REKEY_NATIVE_PATH="android/native/src/credential_rekey.rs"
 readonly CREDENTIAL_REKEY_ACTIVITY_PATH="android/app/src/main/java/com/routalk/scoutoperator/CredentialRekeyActivity.kt"
 readonly STAGE_D_ACTIVITY_PATH="android/app/src/main/java/com/routalk/scoutoperator/StageDProofActivity.kt"
+readonly STAGE_E_ACTIVITY_PATH="android/app/src/main/java/com/routalk/scoutoperator/StageEPreflightActivity.kt"
 readonly OPERATOR_HUB_ACTIVITY_PATH="android/app/src/main/java/com/routalk/scoutoperator/OperatorHubActivity.kt"
 readonly ANDROID_MANIFEST_PATH="android/app/src/main/AndroidManifest.xml"
 readonly SIGNING_DESIGN_DOC="docs/DEVNET_SIGNING_BOUNDARY_V1.md"
@@ -262,6 +265,93 @@ assert_absent_in_path \
 if ! grep -A2 'android:name=".StageDProofActivity"' "${ANDROID_MANIFEST_PATH}" | \
   grep --fixed-strings 'android:exported="false"' >/dev/null 2>&1; then
   fail "Stage D proof activity must remain non-exported"
+fi
+
+echo "Checking Stage E simulation-only boundary..."
+
+assert_present_in_path \
+  "pub mod stage_e_preflight;" \
+  "${SIGNING_MODULE_PATH}" \
+  "Stage E simulation preflight module wiring is missing"
+
+assert_present_in_path \
+  "scout-stage-e-devnet-simulation-proof-v1" \
+  "${STAGE_E_CORE_PATH}" \
+  "fixed Stage E simulation payload is missing"
+
+assert_present_in_path \
+  "STAGE_E_MAX_FEE_LAMPORTS: u64 = 10_000" \
+  "${STAGE_E_CORE_PATH}" \
+  "Stage E fixed fee ceiling is missing"
+
+assert_present_in_path \
+  'method: "getFeeForMessage"' \
+  "${STAGE_E_CORE_PATH}" \
+  "Stage E fee preflight RPC is missing"
+
+assert_present_in_path \
+  'method: "simulateTransaction"' \
+  "${STAGE_E_CORE_PATH}" \
+  "Stage E simulation RPC is missing"
+
+assert_present_in_path \
+  "simulateStageEDevnetProof" \
+  "${ANDROID_BRIDGE_PATH}" \
+  "narrow Android Stage E simulation request is missing"
+
+assert_present_in_path \
+  "NativeBridge_simulateStageEDevnetProof" \
+  "${STAGE_E_NATIVE_PATH}" \
+  "narrow JNI Stage E simulation export is missing"
+
+assert_present_in_path \
+  "SIMULATION ONLY — NO TRANSACTION SUBMISSION" \
+  "${STAGE_E_ACTIVITY_PATH}" \
+  "Stage E simulation-only safety statement is missing"
+
+assert_present_in_path \
+  "MAINNET — DISABLED" \
+  "${STAGE_E_ACTIVITY_PATH}" \
+  "Stage E Mainnet safety statement is missing"
+
+assert_present_in_path \
+  "ARBITRARY SIGNING — DISABLED" \
+  "${STAGE_E_ACTIVITY_PATH}" \
+  "Stage E arbitrary-signing safety statement is missing"
+
+assert_present_in_path \
+  "StageEPreflightActivity::class.java" \
+  "${OPERATOR_HUB_ACTIVITY_PATH}" \
+  "Stage E operator hub launcher is missing"
+
+assert_absent_in_path \
+  "signStageCDevnetProof" \
+  "${STAGE_E_ACTIVITY_PATH}" \
+  "Stage E must use only its fixed simulation preflight request"
+
+assert_absent_in_path \
+  "createLockedDevnetVault" \
+  "${STAGE_E_ACTIVITY_PATH}" \
+  "Stage E must not create or replace the wallet"
+
+assert_absent_in_path \
+  "rekeyLockedDevnetVault" \
+  "${STAGE_E_ACTIVITY_PATH}" \
+  "Stage E must not re-key the wallet"
+
+assert_absent_in_path \
+  "exportLockedVaultRecoveryWords" \
+  "${STAGE_E_ACTIVITY_PATH}" \
+  "Stage E must not export recovery words"
+
+assert_absent_in_path \
+  "ClipboardManager" \
+  "${STAGE_E_ACTIVITY_PATH}" \
+  "Stage E proof metadata must not be copied to the clipboard"
+
+if ! grep -A2 'android:name=".StageEPreflightActivity"' "${ANDROID_MANIFEST_PATH}" | \
+  grep --fixed-strings 'android:exported="false"' >/dev/null 2>&1; then
+  fail "Stage E preflight activity must remain non-exported"
 fi
 
 if ! grep -A6 'android:name=".CredentialRecoveryActivity"' "${ANDROID_MANIFEST_PATH}" | \
