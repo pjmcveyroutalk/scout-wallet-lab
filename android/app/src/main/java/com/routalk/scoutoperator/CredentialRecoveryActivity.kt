@@ -62,6 +62,12 @@ class CredentialRecoveryActivity : Activity() {
         )
         root.addView(
             text(
+                "Candidate verification does not apply the 16-character wallet-creation minimum.",
+                14f,
+            ),
+        )
+        root.addView(
+            text(
                 "NO SIGNING • NO TRANSACTION • NO VAULT CHANGES",
                 14f,
             ),
@@ -188,8 +194,7 @@ class CredentialRecoveryActivity : Activity() {
 
             when (
                 val validation =
-                    PassphrasePolicy.validateAndEncode(
-                        candidateText,
+                    PassphrasePolicy.encodeCandidateForVerification(
                         candidateText,
                     )
             ) {

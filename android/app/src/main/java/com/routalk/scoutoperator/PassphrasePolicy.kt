@@ -36,10 +36,38 @@ internal object PassphrasePolicy {
             )
         }
 
-        val passphraseBytes = ByteArray(passphrase.length)
+        return encodePrintableAscii(passphrase)
+    }
 
-        for (index in passphrase.indices) {
-            val character = passphrase[index]
+    fun encodeCandidateForVerification(
+        candidate: CharSequence,
+    ): ValidationResult {
+        if (candidate.isEmpty()) {
+            return ValidationResult.Invalid(
+                "Candidate passphrase cannot be empty.",
+            )
+        }
+
+        if (candidate.length > MAX_LENGTH) {
+            return ValidationResult.Invalid(
+                "Candidate passphrase must be no more than $MAX_LENGTH characters.",
+            )
+        }
+
+        return encodePrintableAscii(candidate)
+    }
+
+    fun wipe(bytes: ByteArray) {
+        bytes.fill(0)
+    }
+
+    private fun encodePrintableAscii(
+        value: CharSequence,
+    ): ValidationResult {
+        val passphraseBytes = ByteArray(value.length)
+
+        for (index in value.indices) {
+            val character = value[index]
 
             if (character.code !in 0x20..0x7E) {
                 passphraseBytes.fill(0)
@@ -53,10 +81,6 @@ internal object PassphrasePolicy {
         }
 
         return ValidationResult.Valid(passphraseBytes)
-    }
-
-    fun wipe(bytes: ByteArray) {
-        bytes.fill(0)
     }
 
     private fun matches(
