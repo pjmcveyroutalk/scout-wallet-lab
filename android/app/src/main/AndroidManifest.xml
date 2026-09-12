@@ -17,6 +17,10 @@
             android:exported="false" />
 
         <activity
+            android:name=".RecoveryWordsActivity"
+            android:exported="false" />
+
+        <activity
             android:name=".MainActivity"
             android:exported="false" />
 
