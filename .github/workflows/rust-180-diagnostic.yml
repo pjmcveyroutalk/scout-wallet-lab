@@ -1,0 +1,44 @@
+name: Rust 1.80 Diagnostic
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    name: Capture Rust 1.80 diagnostics
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust 1.80.0
+        uses: dtolnay/rust-toolchain@1.80.0
+        with:
+          components: rustfmt, clippy
+
+      - name: Capture Clippy output and suggested fixes
+        shell: bash
+        run: |
+          set +e
+          cargo clippy --locked --workspace --all-targets -- -D warnings > clippy-output.txt 2>&1
+          echo "$?" > clippy-status.txt
+          cargo clippy --fix --allow-dirty --allow-staged --locked --workspace --all-targets -- -D warnings > clippy-fix-output.txt 2>&1
+          echo "$?" > clippy-fix-status.txt
+          git diff > clippy-fix.patch
+          exit 0
+
+      - name: Upload diagnostics
+        uses: actions/upload-artifact@v4
+        with:
+          name: rust-180-clippy-diagnostics
+          path: |
+            clippy-output.txt
+            clippy-status.txt
+            clippy-fix-output.txt
+            clippy-fix-status.txt
+            clippy-fix.patch
+          if-no-files-found: error
