@@ -1,3 +1,6 @@
+#[path = "credential_rekey.rs"]
+mod credential_rekey;
+
 use super::java_string;
 use jni::{
     objects::{JByteArray, JClass, JString},
