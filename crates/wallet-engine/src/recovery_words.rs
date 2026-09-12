@@ -1,3 +1,6 @@
+#[path = "devnet_signing_coordinator.rs"]
+pub mod devnet_signing_coordinator;
+
 use bip39::{Language, Mnemonic};
 use ed25519_dalek::SigningKey;
 use solana_pubkey::Pubkey;
