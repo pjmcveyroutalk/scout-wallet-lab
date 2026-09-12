@@ -78,7 +78,7 @@ pub(crate) fn recovery_words_from_signing_seed(
         return Err(RecoveryWordsError::RoundTripMismatch);
     }
 
-    verify_seed_public_key(&*recovered_seed, expected_public_key)?;
+    verify_seed_public_key(&recovered_seed, expected_public_key)?;
 
     Ok(RecoveryWords {
         words,
@@ -116,12 +116,13 @@ pub(crate) fn signing_seed_from_recovery_words(
     Ok(signing_seed)
 }
 
+#[cfg(test)]
 pub(crate) fn verify_recovery_words_identity(
     words: &str,
     expected_public_key: Pubkey,
 ) -> Result<(), RecoveryWordsError> {
     let signing_seed = signing_seed_from_recovery_words(words)?;
-    verify_seed_public_key(&*signing_seed, expected_public_key)
+    verify_seed_public_key(&signing_seed, expected_public_key)
 }
 
 fn normalize_recovery_words(words: &str) -> Zeroizing<String> {
