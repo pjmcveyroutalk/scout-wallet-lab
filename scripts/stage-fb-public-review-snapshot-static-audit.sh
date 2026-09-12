@@ -16,6 +16,10 @@ fail() {
 
 grep -F 'data class Snapshot(' "${SNAPSHOT_PATH}" >/dev/null || \
   fail "immutable public snapshot model is missing"
+grep -F 'fun createFromPublicPresubmit(' "${SNAPSHOT_PATH}" >/dev/null || \
+  fail "token-free public presubmit handoff builder is missing"
+grep -F 'StageFBPublicSignatureCodec.fromLowercaseHex(signatureHex)' "${SNAPSHOT_PATH}" >/dev/null || \
+  fail "public signature conversion is missing"
 grep -F 'StageFBCandidateFingerprint.derive(candidate.metadata)' "${SNAPSHOT_PATH}" >/dev/null || \
   fail "candidate fingerprint must be re-derived"
 grep -F 'StageFBCandidateReviewReceipt.create(' "${SNAPSHOT_PATH}" >/dev/null || \
@@ -29,6 +33,8 @@ grep -F 'candidate.unitsConsumed <= 0L' "${SNAPSHOT_PATH}" >/dev/null || \
 
 for test_name in \
   exactPreparedCandidateProducesPublicSnapshot \
+  publicPresubmitFieldsProduceSameSnapshotWithoutCandidateToken \
+  malformedPublicSignatureHexFailsClosed \
   tamperedFingerprintFailsClosed \
   tamperedReviewReceiptFailsClosed \
   invalidSimulationUnitsFailClosed; do
@@ -38,6 +44,7 @@ done
 
 for pattern in \
   'tokenHex' \
+  'candidateToken' \
   'NativeBridge' \
   'SharedPreferences' \
   'android.content.Context' \
