@@ -44,6 +44,21 @@ grep -F 'ONE-ATTEMPT GUARD — CORRUPT / FAIL CLOSED' "${ACTIVITY_PATH}" >/dev/n
 grep -F 'ONE-ATTEMPT GUARD — RECORD PRESENT' "${ACTIVITY_PATH}" >/dev/null || \
   fail "Stage F-B gate recorded-attempt state is missing"
 
+grep -F 'Candidate fingerprint SHA-256: ' "${ACTIVITY_PATH}" >/dev/null || \
+  fail "Stage F-B gate must expose the persisted public candidate fingerprint"
+
+grep -F 'loaded.record.candidateFingerprintSha256' "${ACTIVITY_PATH}" >/dev/null || \
+  fail "Stage F-B gate must read the persisted candidate fingerprint without mutation"
+
+grep -F 'Review receipt SHA-256: ' "${ACTIVITY_PATH}" >/dev/null || \
+  fail "Stage F-B gate must expose the persisted public review receipt"
+
+grep -F 'loaded.record.reviewReceiptSha256' "${ACTIVITY_PATH}" >/dev/null || \
+  fail "Stage F-B gate must read the persisted review receipt without mutation"
+
+grep -F 'BINDING OBSERVATION ONLY — EXECUTION NOT AUTHORIZED' "${ACTIVITY_PATH}" >/dev/null || \
+  fail "Stage F-B gate must state that binding observation does not authorize execution"
+
 grep -F 'StageFBGateActivity::class.java' "${HUB_PATH}" >/dev/null || \
   fail "Stage F-B operator hub entry is missing"
 
