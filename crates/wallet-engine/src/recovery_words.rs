@@ -1,5 +1,7 @@
 #[path = "devnet_signing_coordinator.rs"]
 pub mod devnet_signing_coordinator;
+#[path = "stage_e_preflight.rs"]
+pub mod stage_e_preflight;
 
 use bip39::{Language, Mnemonic};
 use ed25519_dalek::SigningKey;
