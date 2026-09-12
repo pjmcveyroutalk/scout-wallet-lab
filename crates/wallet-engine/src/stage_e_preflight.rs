@@ -1,7 +1,7 @@
 use super::devnet_signing_coordinator::{DevnetSigningCoordinator, DevnetSigningCoordinatorError};
 use crate::{
-    CanonicalTransactionMessage, Cluster, DevnetRpc, ExecutionPolicy, PreparedTransaction, RpcError,
-    SignatureBytes,
+    CanonicalTransactionMessage, Cluster, DevnetRpc, ExecutionPolicy, PreparedTransaction,
+    RpcError, SignatureBytes,
 };
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
 use reqwest::Client;
@@ -374,7 +374,9 @@ fn parse_simulation_response(
         return Err(StageEPreflightError::RpcRejected);
     }
 
-    let result = response.result.ok_or(StageEPreflightError::InvalidResponse)?;
+    let result = response
+        .result
+        .ok_or(StageEPreflightError::InvalidResponse)?;
     if result.value.err.is_some() {
         return Err(StageEPreflightError::RpcRejected);
     }
@@ -400,7 +402,10 @@ mod tests {
     fn stage_e_instruction_is_fixed_and_has_no_accounts() -> Result<(), StageEPreflightError> {
         let instruction = stage_e_preflight_instruction()?;
 
-        assert_eq!(instruction.program_id.to_string(), STAGE_E_PREFLIGHT_PROGRAM_ID);
+        assert_eq!(
+            instruction.program_id.to_string(),
+            STAGE_E_PREFLIGHT_PROGRAM_ID
+        );
         assert_eq!(instruction.data, STAGE_E_PREFLIGHT_PAYLOAD);
         assert!(instruction.accounts.is_empty());
         Ok(())
@@ -432,16 +437,14 @@ mod tests {
 
     #[test]
     fn fee_response_requires_value() {
-        let valid: GetFeeForMessageResponse = serde_json::from_str(
-            r#"{"result":{"value":5000},"error":null}"#,
-        )
-        .expect("valid test fixture");
+        let valid: GetFeeForMessageResponse =
+            serde_json::from_str(r#"{"result":{"value":5000},"error":null}"#)
+                .expect("valid test fixture");
         assert_eq!(parse_fee_response(valid), Ok(5_000));
 
-        let missing: GetFeeForMessageResponse = serde_json::from_str(
-            r#"{"result":{"value":null},"error":null}"#,
-        )
-        .expect("valid test fixture");
+        let missing: GetFeeForMessageResponse =
+            serde_json::from_str(r#"{"result":{"value":null},"error":null}"#)
+                .expect("valid test fixture");
         assert_eq!(
             parse_fee_response(missing),
             Err(StageEPreflightError::InvalidResponse)
