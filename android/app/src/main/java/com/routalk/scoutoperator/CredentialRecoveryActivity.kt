@@ -186,6 +186,19 @@ class CredentialRecoveryActivity : Activity() {
         fullWidth(recoveryWords)
         root.addView(recoveryWords)
 
+        val changePassphrase =
+            Button(this).apply {
+                text = "CHANGE WALLET PASSPHRASE"
+                isEnabled =
+                    !lockedVaultJson.isNullOrBlank() &&
+                        !expectedAddress.isNullOrBlank()
+                contentDescription =
+                    "Open the identity-preserving Scout wallet passphrase re-key screen"
+            }
+
+        fullWidth(changePassphrase)
+        root.addView(changePassphrase)
+
         val returnToScout =
             Button(this).apply {
                 text = "RETURN TO SCOUT"
@@ -261,6 +274,11 @@ class CredentialRecoveryActivity : Activity() {
         recoveryWords.setOnClickListener {
             clearSensitiveField()
             startActivity(Intent(this, RecoveryWordsActivity::class.java))
+        }
+
+        changePassphrase.setOnClickListener {
+            clearSensitiveField()
+            startActivity(Intent(this, CredentialRekeyActivity::class.java))
         }
 
         returnToScout.setOnClickListener {
