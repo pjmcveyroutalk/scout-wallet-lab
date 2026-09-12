@@ -48,7 +48,7 @@ class OperatorHubActivity : Activity() {
         root.addView(text("DEVNET ONLY", 18f))
         root.addView(
             text(
-                "Choose an explicit operator gate. Mainnet and transaction submission remain disabled.",
+                "Choose an explicit operator gate. Mainnet and ledger submission remain disabled.",
                 15f,
             ),
         )
@@ -131,6 +131,30 @@ class OperatorHubActivity : Activity() {
         root.addView(
             text(
                 "Stage E preflight signs only a fixed Memo proof candidate, checks the Devnet fee, and simulates it with signature verification. Transaction submission remains disabled.",
+                14f,
+            ),
+        )
+
+        val stageF =
+            Button(this).apply {
+                text = "STAGE F-A DEVNET PRESUBMIT PROOF"
+                contentDescription =
+                    "Open the fixed Scout Stage F-A Devnet presubmit signing and simulation gate"
+                setOnClickListener {
+                    startActivity(
+                        Intent(
+                            this@OperatorHubActivity,
+                            StageFPresubmitActivity::class.java,
+                        ),
+                    )
+                }
+            }
+        fullWidth(stageF)
+        root.addView(stageF)
+
+        root.addView(
+            text(
+                "Stage F-A prepares one fixed Memo candidate, checks its fee and remaining-balance floor, signs and signature-verifies it in Devnet simulation, and holds the candidate only in process memory until discard. Ledger submission remains disabled.",
                 14f,
             ),
         )
