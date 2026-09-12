@@ -52,7 +52,7 @@ class StageFBGateActivity : Activity() {
         )
         root.addView(
             text(
-                "The final Stage F-B flow will preserve the fixed Scout Devnet proof candidate, fee ceiling, remaining-balance floor, one-signer identity check, exact signed-byte simulation, one-attempt rule, and read-only resolution after any uncertain delivery outcome.",
+                "This screen can now perform a manual read-only Devnet resolution check for the exact public signature already stored in the one-attempt guard. It cannot create, sign, replay, replace, or submit a transaction.",
                 14f,
             ),
         )
@@ -73,12 +73,38 @@ class StageFBGateActivity : Activity() {
             ),
         )
 
-        root.addView(
+        val guardStatus =
             text(
                 describeAttemptGuardState(),
                 14f,
-            ),
-        )
+            )
+        root.addView(guardStatus)
+
+        val refresh =
+            Button(this).apply {
+                text = "REFRESH READ-ONLY RESOLUTION"
+                contentDescription = "Refresh the public Stage F-B Devnet resolution state"
+                isEnabled = StageFBAttemptGuard(this@StageFBGateActivity).load() is
+                    StageFBAttemptGuard.LoadResult.Present
+            }
+        fullWidth(refresh)
+        root.addView(refresh)
+
+        refresh.setOnClickListener {
+            refresh.isEnabled = false
+            status.text = "READ-ONLY RESOLUTION — CHECKING DEVNET"
+
+            Thread {
+                val outcome = refreshResolution()
+
+                runOnUiThread {
+                    guardStatus.text = describeAttemptGuardState()
+                    status.text = outcome
+                    refresh.isEnabled =
+                        StageFBAttemptGuard(this).load() is StageFBAttemptGuard.LoadResult.Present
+                }
+            }.start()
+        }
 
         val close =
             Button(this).apply {
@@ -102,6 +128,79 @@ class StageFBGateActivity : Activity() {
 
         setContentView(scrollView)
     }
+
+    private fun refreshResolution(): String {
+        val guard = StageFBAttemptGuard(this)
+        val loaded = guard.load()
+        if (loaded !is StageFBAttemptGuard.LoadResult.Present) {
+            return "READ-ONLY RESOLUTION BLOCKED — GUARD NOT AVAILABLE"
+        }
+
+        val blockHeightResult = NativeBridge.devnetBlockHeight()
+        if (!blockHeightResult.startsWith("ok:")) {
+            return "READ-ONLY RESOLUTION FAILED — BLOCK HEIGHT UNAVAILABLE"
+        }
+
+        val currentBlockHeight = blockHeightResult.removePrefix("ok:").toLongOrNull()
+        if (currentBlockHeight == null || currentBlockHeight <= 0L) {
+            return "READ-ONLY RESOLUTION FAILED — INVALID BLOCK HEIGHT"
+        }
+
+        val observedStatus =
+            when (val result = StageFBReadOnlyStatusClient.fetch(loaded.record.expectedSignature)) {
+                StageFBReadOnlyStatusClient.Result.Missing -> null
+                is StageFBReadOnlyStatusClient.Result.Observed ->
+                    StageFBReadOnlyResolution.ObservedStatus(
+                        slot = result.slot,
+                        confirmationState = result.confirmationState,
+                        hasExecutionError = result.hasExecutionError,
+                    )
+                StageFBReadOnlyStatusClient.Result.Invalid ->
+                    return "READ-ONLY RESOLUTION FAILED — DEVNET STATUS INVALID"
+            }
+
+        val resolution =
+            StageFBReadOnlyResolution.resolve(
+                observedStatus = observedStatus,
+                currentBlockHeight = currentBlockHeight,
+                lastValidBlockHeight = loaded.record.lastValidBlockHeight,
+            )
+
+        if (resolution == StageFBReadOnlyResolution.Resolution.Invalid) {
+            return "READ-ONLY RESOLUTION FAILED — FAIL-CLOSED RESULT"
+        }
+
+        return when (
+            guard.updateFromResolution(
+                candidateFingerprintSha256 = loaded.record.candidateFingerprintSha256,
+                reviewReceiptSha256 = loaded.record.reviewReceiptSha256,
+                expectedSignature = loaded.record.expectedSignature,
+                resolution = resolution,
+            )
+        ) {
+            StageFBAttemptGuard.UpdateResult.UPDATED_AND_PERSISTED ->
+                "READ-ONLY RESOLUTION — ${resolutionLabel(resolution)}"
+            StageFBAttemptGuard.UpdateResult.NO_GUARD_PRESENT ->
+                "READ-ONLY RESOLUTION FAILED — GUARD DISAPPEARED"
+            StageFBAttemptGuard.UpdateResult.CORRUPT_GUARD ->
+                "READ-ONLY RESOLUTION FAILED — GUARD CORRUPT / FAIL CLOSED"
+            StageFBAttemptGuard.UpdateResult.INVALID_TRANSITION ->
+                "READ-ONLY RESOLUTION FAILED — INVALID STATE TRANSITION"
+            StageFBAttemptGuard.UpdateResult.PERSISTENCE_FAILED ->
+                "READ-ONLY RESOLUTION FAILED — STATUS PERSISTENCE FAILED"
+        }
+    }
+
+    private fun resolutionLabel(resolution: StageFBReadOnlyResolution.Resolution): String =
+        when (resolution) {
+            StageFBReadOnlyResolution.Resolution.Pending -> "PENDING"
+            is StageFBReadOnlyResolution.Resolution.Processed -> "PROCESSED"
+            is StageFBReadOnlyResolution.Resolution.Confirmed -> "CONFIRMED"
+            is StageFBReadOnlyResolution.Resolution.Finalized -> "FINALIZED"
+            is StageFBReadOnlyResolution.Resolution.Failed -> "FAILED"
+            StageFBReadOnlyResolution.Resolution.Expired -> "EXPIRED"
+            StageFBReadOnlyResolution.Resolution.Invalid -> "INVALID"
+        }
 
     private fun describeAttemptGuardState(): String =
         when (val loaded = StageFBAttemptGuard(this).load()) {
