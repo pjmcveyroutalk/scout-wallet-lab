@@ -2,6 +2,8 @@
 pub mod devnet_signing_coordinator;
 #[path = "stage_e_preflight.rs"]
 pub mod stage_e_preflight;
+#[path = "stage_f_presubmit.rs"]
+pub mod stage_f_presubmit;
 
 use bip39::{Language, Mnemonic};
 use ed25519_dalek::SigningKey;
