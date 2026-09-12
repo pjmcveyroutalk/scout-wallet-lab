@@ -7,6 +7,9 @@ readonly SIGNING_COORDINATOR_PATH="crates/wallet-engine/src/devnet_signing_coord
 readonly SIGNING_MODULE_PATH="crates/wallet-engine/src/recovery_words.rs"
 readonly ANDROID_NATIVE_PATH="android/native/src/lib.rs"
 readonly ANDROID_BRIDGE_PATH="android/app/src/main/java/com/routalk/scoutoperator/NativeBridge.kt"
+readonly CREDENTIAL_RECOVERY_NATIVE_PATH="android/native/src/credential_recovery.rs"
+readonly CREDENTIAL_RECOVERY_ACTIVITY_PATH="android/app/src/main/java/com/routalk/scoutoperator/CredentialRecoveryActivity.kt"
+readonly ANDROID_MANIFEST_PATH="android/app/src/main/AndroidManifest.xml"
 readonly SIGNING_DESIGN_DOC="docs/DEVNET_SIGNING_BOUNDARY_V1.md"
 
 cd "${REPO_ROOT}"
@@ -184,6 +187,53 @@ assert_present_in_path \
   "NativeBridge_signStageCDevnetProof" \
   "${ANDROID_NATIVE_PATH}" \
   "narrow JNI Stage C signing export is missing"
+
+echo "Checking credential recovery boundary..."
+
+assert_present_in_path \
+  "verifyLockedDevnetPassphrase" \
+  "${ANDROID_BRIDGE_PATH}" \
+  "narrow Android passphrase verification request is missing"
+
+assert_present_in_path \
+  "NativeBridge_verifyLockedDevnetPassphrase" \
+  "${CREDENTIAL_RECOVERY_NATIVE_PATH}" \
+  "narrow JNI passphrase verification export is missing"
+
+assert_present_in_path \
+  "NO SIGNING • NO TRANSACTION • NO VAULT CHANGES" \
+  "${CREDENTIAL_RECOVERY_ACTIVITY_PATH}" \
+  "credential recovery safety statement is missing"
+
+assert_present_in_path \
+  "android:name=\".CredentialRecoveryActivity\"" \
+  "${ANDROID_MANIFEST_PATH}" \
+  "credential recovery launcher activity is missing"
+
+assert_absent_in_path \
+  "signStageCDevnetProof" \
+  "${CREDENTIAL_RECOVERY_ACTIVITY_PATH}" \
+  "credential recovery activity must not invoke signing"
+
+assert_absent_in_path \
+  "createLockedDevnetVault" \
+  "${CREDENTIAL_RECOVERY_ACTIVITY_PATH}" \
+  "credential recovery activity must not create a wallet"
+
+assert_absent_in_path \
+  "saveVault(" \
+  "${CREDENTIAL_RECOVERY_ACTIVITY_PATH}" \
+  "credential recovery activity must not write or replace the vault"
+
+assert_absent_in_path \
+  "export_emergency_recovery_words" \
+  "${CREDENTIAL_RECOVERY_NATIVE_PATH}" \
+  "credential recovery verification gate must not export recovery words yet"
+
+assert_absent_in_path \
+  "restore_from_emergency_recovery_words" \
+  "${CREDENTIAL_RECOVERY_NATIVE_PATH}" \
+  "credential recovery verification gate must not restore or replace a vault"
 
 echo "Checking Vercel trust boundary..."
 
