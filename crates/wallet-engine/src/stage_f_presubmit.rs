@@ -44,6 +44,7 @@ pub enum StageFPreSubmitError {
     CandidateNotFound,
     CandidateTokenMismatch,
     CandidateLifecycleInvalid,
+    CandidateExpired,
 }
 
 impl fmt::Display for StageFPreSubmitError {
@@ -65,6 +66,7 @@ impl fmt::Display for StageFPreSubmitError {
             Self::CandidateNotFound => "Stage F prepared candidate was not found",
             Self::CandidateTokenMismatch => "Stage F prepared candidate token did not match",
             Self::CandidateLifecycleInvalid => "Stage F prepared candidate lifecycle is invalid",
+            Self::CandidateExpired => "Stage F prepared candidate blockhash lease expired",
         };
 
         formatter.write_str(message)
@@ -388,6 +390,34 @@ impl CandidateStore {
         }
 
         Ok(current_block_height > candidate.last_valid_block_height)
+    }
+
+    #[allow(dead_code)]
+    fn take_for_submission(
+        &mut self,
+        token: StageFCandidateToken,
+        current_block_height: u64,
+    ) -> Result<PreparedStageFCandidate, StageFPreSubmitError> {
+        let candidate = self
+            .candidate
+            .as_ref()
+            .ok_or(StageFPreSubmitError::CandidateNotFound)?;
+
+        if candidate.token != token {
+            return Err(StageFPreSubmitError::CandidateTokenMismatch);
+        }
+
+        if candidate.lifecycle_state != TransactionState::Signed {
+            return Err(StageFPreSubmitError::CandidateLifecycleInvalid);
+        }
+
+        if current_block_height > candidate.last_valid_block_height {
+            return Err(StageFPreSubmitError::CandidateExpired);
+        }
+
+        self.candidate
+            .take()
+            .ok_or(StageFPreSubmitError::CandidateNotFound)
     }
 }
 
@@ -744,6 +774,47 @@ mod tests {
             store.discard(first_token),
             Err(StageFPreSubmitError::CandidateNotFound)
         ));
+
+        Ok(())
+    }
+
+    #[test]
+    fn candidate_store_consumes_once_before_submission() -> Result<(), StageFPreSubmitError> {
+        let token = StageFCandidateToken::from_bytes([0x44_u8; 16]);
+        let mut store = CandidateStore::default();
+        store.insert(PreparedStageFCandidate {
+            token,
+            wire_transaction: Zeroizing::new(vec![9_u8, 8_u8, 7_u8]),
+            last_valid_block_height: 900,
+            lifecycle_state: TransactionState::Signed,
+        })?;
+
+        let consumed = store.take_for_submission(token, 900)?;
+        assert_eq!(consumed.wire_transaction.as_slice(), &[9_u8, 8_u8, 7_u8]);
+        assert!(matches!(
+            store.take_for_submission(token, 900),
+            Err(StageFPreSubmitError::CandidateNotFound)
+        ));
+
+        Ok(())
+    }
+
+    #[test]
+    fn candidate_store_does_not_consume_expired_candidate() -> Result<(), StageFPreSubmitError> {
+        let token = StageFCandidateToken::from_bytes([0x55_u8; 16]);
+        let mut store = CandidateStore::default();
+        store.insert(PreparedStageFCandidate {
+            token,
+            wire_transaction: Zeroizing::new(vec![6_u8, 5_u8, 4_u8]),
+            last_valid_block_height: 1_000,
+            lifecycle_state: TransactionState::Signed,
+        })?;
+
+        assert!(matches!(
+            store.take_for_submission(token, 1_001),
+            Err(StageFPreSubmitError::CandidateExpired)
+        ));
+        assert!(!store.is_expired(token, 1_000)?);
 
         Ok(())
     }
