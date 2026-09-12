@@ -13,6 +13,12 @@ for path in "${GUARD_PATH}" "${RESOLUTION_PATH}"; do
   [[ -f "${path}" ]] || fail "required Stage F-B readiness file is missing: ${path}"
 done
 
+grep -F 'candidate_fingerprint_sha256' "${GUARD_PATH}" >/dev/null || \
+  fail "candidate-fingerprint persistence key is missing"
+
+grep -F 'review_receipt_sha256' "${GUARD_PATH}" >/dev/null || \
+  fail "review-receipt persistence key is missing"
+
 grep -F 'expected_public_signature' "${GUARD_PATH}" >/dev/null || \
   fail "public expected-signature persistence key is missing"
 
@@ -24,6 +30,18 @@ grep -F 'last_valid_block_height' "${GUARD_PATH}" >/dev/null || \
 
 grep -F 'final_public_status' "${GUARD_PATH}" >/dev/null || \
   fail "public resolution-status persistence key is missing"
+
+grep -F 'isLowercaseSha256(candidateFingerprintSha256)' "${GUARD_PATH}" >/dev/null || \
+  fail "candidate fingerprint must be validated before persistence"
+
+grep -F 'isLowercaseSha256(reviewReceiptSha256)' "${GUARD_PATH}" >/dev/null || \
+  fail "review receipt must be validated before persistence"
+
+grep -F '.putString(KEY_CANDIDATE_FINGERPRINT_SHA256, candidateFingerprintSha256)' "${GUARD_PATH}" >/dev/null || \
+  fail "candidate fingerprint must be persisted with the one-attempt guard"
+
+grep -F '.putString(KEY_REVIEW_RECEIPT_SHA256, reviewReceiptSha256)' "${GUARD_PATH}" >/dev/null || \
+  fail "review receipt must be persisted with the one-attempt guard"
 
 grep -F '.commit()' "${GUARD_PATH}" >/dev/null || \
   fail "guard persistence must use synchronous commit before later capability wiring"
