@@ -3,6 +3,8 @@ set -euo pipefail
 
 readonly REPO_ROOT="$(git rev-parse --show-toplevel)"
 readonly EXPORTER_PATH="crates/wallet-engine/src/bin/export_observability.rs"
+readonly ANDROID_NATIVE_PATH="android/native/src/lib.rs"
+readonly ANDROID_BRIDGE_PATH="android/app/src/main/java/com/routalk/scoutoperator/NativeBridge.kt"
 
 cd "${REPO_ROOT}"
 
@@ -29,6 +31,21 @@ assert_absent_in_source() {
     -- "${pattern}" \
     ':!scripts/security-tripwires.sh' \
     ':!README.md' \
+    >/dev/null 2>&1; then
+    fail "${description}"
+  fi
+}
+
+assert_absent_in_path() {
+  local pattern="$1"
+  local path="$2"
+  local description="$3"
+
+  if git grep \
+    --line-number \
+    --fixed-strings \
+    -- "${pattern}" \
+    -- "${path}" \
     >/dev/null 2>&1; then
     fail "${description}"
   fi
@@ -90,6 +107,16 @@ assert_absent_in_source \
 assert_absent_in_source \
   "sign_arbitrary" \
   "arbitrary signing API is forbidden"
+
+assert_absent_in_path \
+  "signTransaction" \
+  "${ANDROID_BRIDGE_PATH}" \
+  "Android signing bridge must remain absent during signing-boundary design"
+
+assert_absent_in_path \
+  "NativeBridge_sign" \
+  "${ANDROID_NATIVE_PATH}" \
+  "JNI signing exposure must remain absent during signing-boundary design"
 
 echo "Checking Vercel trust boundary..."
 
