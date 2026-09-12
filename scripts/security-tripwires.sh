@@ -7,6 +7,8 @@ readonly SIGNING_COORDINATOR_PATH="crates/wallet-engine/src/devnet_signing_coord
 readonly SIGNING_MODULE_PATH="crates/wallet-engine/src/recovery_words.rs"
 readonly ANDROID_NATIVE_PATH="android/native/src/lib.rs"
 readonly ANDROID_BRIDGE_PATH="android/app/src/main/java/com/routalk/scoutoperator/NativeBridge.kt"
+readonly ANDROID_MANIFEST_PATH="android/app/src/main/AndroidManifest.xml"
+readonly STAGE_D_PROOF_PATH="android/app/src/main/java/com/routalk/scoutoperator/StageDProofActivity.kt"
 readonly SIGNING_DESIGN_DOC="docs/DEVNET_SIGNING_BOUNDARY_V1.md"
 
 cd "${REPO_ROOT}"
@@ -184,6 +186,28 @@ assert_present_in_path \
   "NativeBridge_signStageCDevnetProof" \
   "${ANDROID_NATIVE_PATH}" \
   "narrow JNI Stage C signing export is missing"
+
+echo "Checking Stage D proof gate..."
+
+assert_present_in_path \
+  "class StageDProofActivity" \
+  "${STAGE_D_PROOF_PATH}" \
+  "Stage D physical proof harness is missing"
+
+assert_present_in_path \
+  "NativeBridge.signStageCDevnetProof(" \
+  "${STAGE_D_PROOF_PATH}" \
+  "Stage D proof harness is not bound to the fixed Stage C signer"
+
+assert_present_in_path \
+  '<activity android:name=".StageDProofActivity" android:exported="false" />' \
+  "${ANDROID_MANIFEST_PATH}" \
+  "Stage D proof harness must remain non-exported until the operator gate"
+
+assert_absent_in_path \
+  "Scout Stage D Proof" \
+  "${ANDROID_MANIFEST_PATH}" \
+  "Stage D proof launcher exposure must remain closed until the operator gate"
 
 echo "Checking Vercel trust boundary..."
 
