@@ -111,6 +111,30 @@ class OperatorHubActivity : Activity() {
             ),
         )
 
+        val stageE =
+            Button(this).apply {
+                text = "STAGE E DEVNET SIMULATION PREFLIGHT"
+                contentDescription =
+                    "Open the fixed Scout Stage E Devnet signing and simulation-only preflight gate"
+                setOnClickListener {
+                    startActivity(
+                        Intent(
+                            this@OperatorHubActivity,
+                            StageEPreflightActivity::class.java,
+                        ),
+                    )
+                }
+            }
+        fullWidth(stageE)
+        root.addView(stageE)
+
+        root.addView(
+            text(
+                "Stage E preflight signs only a fixed Memo proof candidate, checks the Devnet fee, and simulates it with signature verification. Transaction submission remains disabled.",
+                14f,
+            ),
+        )
+
         val scrollView =
             ScrollView(this).apply {
                 addView(
