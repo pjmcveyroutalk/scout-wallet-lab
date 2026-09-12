@@ -15,9 +15,7 @@
             android:name=".LockedVaultRestoreActivity"
             android:exported="false" />
 
-        <activity
-            android:name=".StageDProofActivity"
-            android:exported="false" />
+        <activity android:name=".StageDProofActivity" android:exported="false" />
 
         <activity
             android:name=".MainActivity"
