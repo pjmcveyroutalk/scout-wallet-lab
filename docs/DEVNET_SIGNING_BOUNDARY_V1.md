@@ -1,6 +1,6 @@
 # Scout Wallet Lab — Devnet Signing Boundary v1
 
-Status: Stage C approved — Android/JNI request boundary implementation in progress
+Status: Stage C merged and certified — Stage D physical proof harness in preparation
 
 This document defines the Scout Wallet Lab signing milestone without opening transaction submission, Mainnet, remote signing, browser signing, or production-funds movement.
 
@@ -13,6 +13,7 @@ This document defines the Scout Wallet Lab signing milestone without opening tra
 - Browser/Vercel remains outside the signing trust boundary.
 - Recovery-word Android credential crossing remains deferred and is not part of this phase.
 - Stage B native signing coordinator is implemented and certified under the exact Rust 1.80 CI contract.
+- Stage C Android/JNI request boundary is merged into `main` and certified double-green.
 
 ## Existing trusted primitives
 
@@ -88,27 +89,40 @@ Required properties preserved:
 
 ### Stage C — Android request boundary
 
-Approved by PJ after Stage B double-green certification.
+Completed, double-green, and merged after operator approval.
 
-The Android/JNI boundary must remain narrow:
+The Android/JNI boundary remains narrow:
 
 - Android may request one policy-gated Devnet signature operation;
 - Android must not provide arbitrary message bytes for signing;
-- the native side must reconstruct or consume only typed/canonical transaction state accepted by the Rust coordinator;
-- the passphrase may cross only for the explicit local unlock/sign request and must be handled as secret input;
-- the response may contain only non-secret signing metadata required for verification;
-- no raw seed, private key, keypair, decrypted vault contents, or arbitrary signer handle may cross JNI;
-- no transaction submission or RPC send path may be introduced;
+- the native side reconstructs only the fixed Stage C proof transaction accepted by the Rust coordinator;
+- the passphrase may cross only for the explicit local unlock/sign request and is handled as secret input;
+- the response contains only public verification metadata;
+- no raw seed, private key, keypair, decrypted vault contents, or arbitrary signer handle crosses JNI;
+- no transaction submission or RPC send path exists;
 - Mainnet remains structurally unavailable;
-- generic names or APIs such as `signTransaction(bytes)` are forbidden.
+- generic names or APIs such as `signTransaction(bytes)` remain forbidden.
 
-The Stage C implementation is not accepted until Rust 1.80 CI and Android CI are both green and the diff confirms the boundary remains narrow.
+Certified Stage C merge commit: `3bc6799cabcdf121b5aee73028d5c1c6b4608728`.
 
 ### Stage D — physical Devnet signing proof
 
-Only after Stage C is double-green and explicitly accepted.
+In preparation.
 
-Physical proof will use a deliberately bounded Devnet-only transaction and verify the produced signature/address relationship without enabling network submission in the same milestone.
+The Stage D proof harness must:
+
+- run on the physical Android operator device;
+- require explicit local passphrase entry and confirmation;
+- use only the stored encrypted Devnet vault;
+- invoke only the fixed `signStageCDevnetProof` boundary;
+- verify the returned public address matches the stored vault identity;
+- validate the fixed proof response shape, 64-byte signature encoding, recent blockhash presence, and one-lamport reservation;
+- display only public proof metadata;
+- wipe passphrase bytes after the request;
+- keep transaction submission disabled;
+- keep Mainnet disabled.
+
+The proof harness may be compiled while locked from external launch. Exposing or launching it for the first physical signature remains an explicit operator/manual security gate.
 
 ### Stage E — Devnet submission design
 
@@ -152,6 +166,7 @@ No merge is allowed on a red or ambiguous run.
 PJ remains the final authority at the following points:
 
 - merging any signing-boundary PR into `main`;
+- exposing or launching the Stage D physical proof harness;
 - performing the first physical Devnet signature;
 - enabling any transaction submission capability;
 - introducing Mainnet capability;
@@ -161,4 +176,4 @@ Stage C Android/JNI exposure was explicitly approved before implementation began
 
 ## Current next exact action
 
-Implement the narrow Stage C Android/JNI request boundary on `devnet-signing-android-boundary` while preserving the prohibition on arbitrary-message signing, transaction submission, Mainnet, and raw-key export.
+Compile and certify the locked Stage D physical-proof harness on `devnet-physical-signature-proof`. Keep the activity non-exported and transaction submission disabled until the explicit physical-device operator gate.
