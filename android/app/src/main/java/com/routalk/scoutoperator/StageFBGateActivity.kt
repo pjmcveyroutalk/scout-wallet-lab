@@ -73,6 +73,13 @@ class StageFBGateActivity : Activity() {
             ),
         )
 
+        root.addView(
+            text(
+                describeAttemptGuardState(),
+                14f,
+            ),
+        )
+
         val close =
             Button(this).apply {
                 text = "CLOSE"
@@ -95,4 +102,23 @@ class StageFBGateActivity : Activity() {
 
         setContentView(scrollView)
     }
+
+    private fun describeAttemptGuardState(): String =
+        when (val loaded = StageFBAttemptGuard(this).load()) {
+            StageFBAttemptGuard.LoadResult.Empty ->
+                "ONE-ATTEMPT GUARD — CLEAR\nNo Stage F-B ledger attempt is recorded on this device."
+
+            StageFBAttemptGuard.LoadResult.Corrupt ->
+                "ONE-ATTEMPT GUARD — CORRUPT / FAIL CLOSED\nStage F-B must remain read-only until the guard state is repaired deliberately."
+
+            is StageFBAttemptGuard.LoadResult.Present ->
+                buildString {
+                    append("ONE-ATTEMPT GUARD — RECORD PRESENT")
+                    append("\nPublic status: ")
+                    append(loaded.record.publicStatus.name)
+                    append("\nLast valid block height: ")
+                    append(loaded.record.lastValidBlockHeight)
+                    append("\nNo replay or second attempt is available from this screen.")
+                }
+        }
 }
