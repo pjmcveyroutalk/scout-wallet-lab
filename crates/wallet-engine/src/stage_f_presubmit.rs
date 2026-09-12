@@ -392,6 +392,7 @@ impl CandidateStore {
         Ok(current_block_height > candidate.last_valid_block_height)
     }
 
+    #[allow(dead_code)]
     fn take_for_submission(
         &mut self,
         token: StageFCandidateToken,
