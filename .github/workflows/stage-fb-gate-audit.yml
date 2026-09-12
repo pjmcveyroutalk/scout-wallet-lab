@@ -1,0 +1,32 @@
+name: Stage F-B Gate Audit
+
+on:
+  pull_request:
+    paths:
+      - "android/app/src/main/java/com/routalk/scoutoperator/StageFBGateActivity.kt"
+      - "android/app/src/main/java/com/routalk/scoutoperator/OperatorHubActivity.kt"
+      - "android/app/src/main/AndroidManifest.xml"
+      - "scripts/stage-fb-gate-static-audit.sh"
+      - ".github/workflows/stage-fb-gate-audit.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "android/app/src/main/java/com/routalk/scoutoperator/StageFBGateActivity.kt"
+      - "android/app/src/main/java/com/routalk/scoutoperator/OperatorHubActivity.kt"
+      - "android/app/src/main/AndroidManifest.xml"
+      - "scripts/stage-fb-gate-static-audit.sh"
+      - ".github/workflows/stage-fb-gate-audit.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run Stage F-B guarded gate audit
+        run: bash scripts/stage-fb-gate-static-audit.sh
