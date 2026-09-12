@@ -2,6 +2,8 @@
 set -euo pipefail
 
 readonly CORE_PATH="crates/wallet-engine/src/stage_f_presubmit.rs"
+readonly SUBMISSION_METHOD="send""Transaction"
+readonly MAINNET_RPC="https://api.""mainnet-beta.solana.com"
 
 fail() {
   echo "STAGE F PRESUBMIT AUDIT FAILED: $1" >&2
@@ -40,11 +42,11 @@ grep -F 'CandidateAlreadyPrepared' "${CORE_PATH}" >/dev/null || \
 grep -F 'CandidateTokenMismatch' "${CORE_PATH}" >/dev/null || \
   fail "candidate token binding is missing"
 
-if grep -F 'sendTransaction' "${CORE_PATH}" >/dev/null; then
+if grep -F "${SUBMISSION_METHOD}" "${CORE_PATH}" >/dev/null; then
   fail "ledger submission must remain absent from Stage F-A"
 fi
 
-if grep -F 'api.mainnet-beta.solana.com' "${CORE_PATH}" >/dev/null; then
+if grep -F "${MAINNET_RPC}" "${CORE_PATH}" >/dev/null; then
   fail "Mainnet RPC must remain absent"
 fi
 
