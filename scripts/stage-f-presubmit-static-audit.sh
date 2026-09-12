@@ -7,6 +7,7 @@ readonly NATIVE_LIB_PATH="android/native/src/lib.rs"
 readonly NATIVE_PATH="android/native/src/stage_f_presubmit.rs"
 readonly BRIDGE_PATH="android/app/src/main/java/com/routalk/scoutoperator/NativeBridge.kt"
 readonly ACTIVITY_PATH="android/app/src/main/java/com/routalk/scoutoperator/StageFPresubmitActivity.kt"
+readonly SNAPSHOT_PATH="android/app/src/main/java/com/routalk/scoutoperator/StageFBPublicReviewSnapshot.kt"
 readonly HUB_PATH="android/app/src/main/java/com/routalk/scoutoperator/OperatorHubActivity.kt"
 readonly MANIFEST_PATH="android/app/src/main/AndroidManifest.xml"
 readonly SUBMISSION_METHOD="send""Transaction"
@@ -24,6 +25,7 @@ for path in \
   "${NATIVE_PATH}" \
   "${BRIDGE_PATH}" \
   "${ACTIVITY_PATH}" \
+  "${SNAPSHOT_PATH}" \
   "${HUB_PATH}" \
   "${MANIFEST_PATH}"; do
   [[ -f "${path}" ]] || fail "required Stage F-A file is missing: ${path}"
@@ -98,6 +100,24 @@ grep -F 'NativeBridge.prepareStageFDevnetCandidate(' "${ACTIVITY_PATH}" >/dev/nu
 grep -F 'NativeBridge.discardStageFDevnetCandidate(' "${ACTIVITY_PATH}" >/dev/null || \
   fail "Stage F-A activity must provide in-memory candidate discard"
 
+grep -F 'StageFBPublicReviewSnapshot.createFromPublicPresubmit(' "${ACTIVITY_PATH}" >/dev/null || \
+  fail "Stage F-A must derive the token-free Stage F-B public review snapshot"
+
+grep -F 'PRESUBMIT FAILED — STAGE F-B PUBLIC REVIEW SNAPSHOT INVALID' "${ACTIVITY_PATH}" >/dev/null || \
+  fail "Stage F-A must fail closed when the public review snapshot is invalid"
+
+grep -F 'STAGE F-B PUBLIC REVIEW SNAPSHOT — VERIFIED' "${ACTIVITY_PATH}" >/dev/null || \
+  fail "Stage F-A must visibly report verified public review binding"
+
+grep -F 'EXECUTION AUTHORIZED: NO' "${ACTIVITY_PATH}" >/dev/null || \
+  fail "Stage F-A must state that public review does not authorize execution"
+
+grep -F 'preparedPublicReviewSnapshot = null' "${ACTIVITY_PATH}" >/dev/null || \
+  fail "Stage F-A must clear the in-memory public review snapshot"
+
+grep -F 'fun createFromPublicPresubmit(' "${SNAPSHOT_PATH}" >/dev/null || \
+  fail "token-free public presubmit snapshot builder is missing"
+
 grep -F 'StageFPresubmitActivity::class.java' "${HUB_PATH}" >/dev/null || \
   fail "Stage F-A operator hub entry is missing"
 
@@ -116,8 +136,8 @@ for path in "${CORE_PATH}" "${NATIVE_PATH}" "${BRIDGE_PATH}" "${ACTIVITY_PATH}";
   fi
 done
 
-if grep -E 'signTransaction|signMessage|signBytes|ClipboardManager|createLockedDevnetVault|rekeyLockedDevnetVault|exportLockedVaultRecoveryWords' "${ACTIVITY_PATH}" >/dev/null; then
-  fail "generic signing, wallet mutation, recovery export, or clipboard surface escaped into Stage F-A"
+if grep -E 'signTransaction|signMessage|signBytes|ClipboardManager|createLockedDevnetVault|rekeyLockedDevnetVault|exportLockedVaultRecoveryWords|StageFBAttemptGuard|SharedPreferences' "${ACTIVITY_PATH}" >/dev/null; then
+  fail "generic signing, wallet mutation, recovery export, clipboard, attempt-guard mutation, or persistence escaped into Stage F-A"
 fi
 
 rustfmt +1.80.0 --edition 2021 --check "${CORE_PATH}" "${NATIVE_PATH}"

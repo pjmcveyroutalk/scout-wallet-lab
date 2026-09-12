@@ -23,6 +23,7 @@ class StageFPresubmitActivity : Activity() {
     private var confirmationField: EditText? = null
     private var authorizationAcknowledgement: CheckBox? = null
     private var preparedCandidateToken: String? = null
+    private var preparedPublicReviewSnapshot: StageFBPublicReviewSnapshot.Snapshot? = null
 
     private data class PresubmitPrerequisites(
         val ready: Boolean,
@@ -35,6 +36,7 @@ class StageFPresubmitActivity : Activity() {
         val success: Boolean,
         val status: String,
         val candidateToken: String? = null,
+        val publicReviewSnapshot: StageFBPublicReviewSnapshot.Snapshot? = null,
     )
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -291,6 +293,7 @@ class StageFPresubmitActivity : Activity() {
                             clearSensitiveFields()
                             authorizationAcknowledgement?.isChecked = false
                             preparedCandidateToken = result.candidateToken
+                            preparedPublicReviewSnapshot = result.publicReviewSnapshot
                             presubmitStatus.text = result.status
                             prepare.isEnabled = prerequisites.ready && !result.success
                             discard.isEnabled = result.success
@@ -359,6 +362,7 @@ class StageFPresubmitActivity : Activity() {
         confirmationField = null
         authorizationAcknowledgement = null
         preparedCandidateToken = null
+        preparedPublicReviewSnapshot = null
         super.onDestroy()
     }
 
@@ -523,9 +527,31 @@ class StageFPresubmitActivity : Activity() {
             return PresubmitResult(false, "PRESUBMIT FAILED — CANDIDATE TOKEN INVALID")
         }
 
+        val publicReview =
+            StageFBPublicReviewSnapshot.createFromPublicPresubmit(
+                scoutPublicKey = returnedAddress,
+                signatureHex = signatureHex,
+                recentBlockhash = recentBlockhash,
+                feeLamports = feeLamports,
+                balanceLamports = balanceLamports,
+                remainingBalanceLamports = remainingBalanceLamports,
+                simulationSlot = simulationSlot,
+                unitsConsumed = unitsConsumed,
+                lastValidBlockHeight = lastValidBlockHeight,
+            )
+        if (publicReview !is StageFBPublicReviewSnapshot.Result.Valid) {
+            return PresubmitResult(
+                success = false,
+                status = "PRESUBMIT FAILED — STAGE F-B PUBLIC REVIEW SNAPSHOT INVALID",
+            )
+        }
+
+        val publicReviewSnapshot = publicReview.snapshot
+
         return PresubmitResult(
             success = true,
             candidateToken = candidateToken,
+            publicReviewSnapshot = publicReviewSnapshot,
             status =
                 buildString {
                     append("STAGE F-A PRESUBMIT PROOF — PASS")
@@ -560,6 +586,19 @@ class StageFPresubmitActivity : Activity() {
                     append("Last valid block height: ")
                     append(lastValidBlockHeight)
                     append("\n\n")
+                    append("STAGE F-B PUBLIC REVIEW SNAPSHOT — VERIFIED")
+                    append("\n")
+                    append("Public signature: ")
+                    append(publicReviewSnapshot.metadata.expectedSignature)
+                    append("\n")
+                    append("Candidate fingerprint SHA-256: ")
+                    append(publicReviewSnapshot.candidateFingerprintSha256)
+                    append("\n")
+                    append("Review receipt SHA-256: ")
+                    append(publicReviewSnapshot.reviewReceiptSha256)
+                    append("\n")
+                    append("EXECUTION AUTHORIZED: NO")
+                    append("\n\n")
                     append("IN-MEMORY CANDIDATE: HELD — NOT SUBMITTED")
                     append("\n")
                     append("LEDGER SUBMISSION: DISABLED")
@@ -572,11 +611,17 @@ class StageFPresubmitActivity : Activity() {
     }
 
     private fun discardPreparedCandidate(): Boolean {
-        val token = preparedCandidateToken ?: return true
+        val token =
+            preparedCandidateToken
+                ?: run {
+                    preparedPublicReviewSnapshot = null
+                    return true
+                }
 
         return try {
             if (NativeBridge.discardStageFDevnetCandidate(token) == "ok") {
                 preparedCandidateToken = null
+                preparedPublicReviewSnapshot = null
                 true
             } else {
                 false
