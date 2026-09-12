@@ -233,7 +233,10 @@ mod tests {
         assert_eq!(transaction.ledger().state(), TransactionState::Signed);
         assert_eq!(signed.public_key(), payer);
         assert_eq!(signed.reserved_lamports(), 4_000);
-        assert_eq!(signed.recent_blockhash(), transaction.ledger().recent_blockhash());
+        assert_eq!(
+            signed.recent_blockhash(),
+            transaction.ledger().recent_blockhash()
+        );
 
         let verifying_key = VerifyingKey::from_bytes(&payer.to_bytes())
             .map_err(|_| DevnetSigningCoordinatorError::InvalidCanonicalMessage)?;
@@ -285,8 +288,7 @@ mod tests {
     }
 
     #[test]
-    fn transaction_payer_must_match_unlocked_wallet(
-    ) -> Result<(), DevnetSigningCoordinatorError> {
+    fn transaction_payer_must_match_unlocked_wallet() -> Result<(), DevnetSigningCoordinatorError> {
         let (coordinator, _) = coordinator_fixture(0x43)?;
         let other_payer = Pubkey::new_from_array([0x44_u8; 32]);
         let program_id = Pubkey::new_from_array([0x52_u8; 32]);
@@ -302,8 +304,7 @@ mod tests {
     }
 
     #[test]
-    fn exposure_limit_is_enforced_before_signing(
-    ) -> Result<(), DevnetSigningCoordinatorError> {
+    fn exposure_limit_is_enforced_before_signing() -> Result<(), DevnetSigningCoordinatorError> {
         let (coordinator, payer) = coordinator_fixture(0x45)?;
         let program_id = Pubkey::new_from_array([0x53_u8; 32]);
         let policy = ExecutionPolicy::new(1_000, &[program_id])?;
@@ -320,8 +321,7 @@ mod tests {
     }
 
     #[test]
-    fn program_allowlist_is_enforced_before_signing(
-    ) -> Result<(), DevnetSigningCoordinatorError> {
+    fn program_allowlist_is_enforced_before_signing() -> Result<(), DevnetSigningCoordinatorError> {
         let (coordinator, payer) = coordinator_fixture(0x46)?;
         let allowed_program = Pubkey::new_from_array([0x54_u8; 32]);
         let disallowed_program = Pubkey::new_from_array([0x55_u8; 32]);
@@ -339,8 +339,7 @@ mod tests {
     }
 
     #[test]
-    fn expired_blockhash_is_rejected_before_signing(
-    ) -> Result<(), DevnetSigningCoordinatorError> {
+    fn expired_blockhash_is_rejected_before_signing() -> Result<(), DevnetSigningCoordinatorError> {
         let (coordinator, payer) = coordinator_fixture(0x47)?;
         let program_id = Pubkey::new_from_array([0x56_u8; 32]);
         let policy = ExecutionPolicy::new(10_000, &[program_id])?;
