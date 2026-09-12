@@ -214,7 +214,8 @@ mod tests {
     };
     use crate::{
         BlockhashLease, CanonicalTransactionMessage, ExecutionPolicy, LockedVault, PolicyError,
-        PreparedTransaction, SecretPassphrase, SecretSeed, SignerError, TransactionState, VaultError,
+        PreparedTransaction, SecretPassphrase, SecretSeed, SignerError, TransactionState,
+        VaultError,
     };
     use ed25519_dalek::{Signature, Verifier as _, VerifyingKey};
     use solana_hash::Hash;
