@@ -48,4 +48,59 @@ internal object StageFBPublicReviewSnapshot {
             ),
         )
     }
+
+    fun createFromPublicPresubmit(
+        scoutPublicKey: String,
+        signatureHex: String,
+        recentBlockhash: String,
+        feeLamports: Long,
+        balanceLamports: Long,
+        remainingBalanceLamports: Long,
+        simulationSlot: Long,
+        unitsConsumed: Long,
+        lastValidBlockHeight: Long,
+    ): Result {
+        if (unitsConsumed <= 0L) {
+            return Result.Invalid
+        }
+
+        val expectedSignature =
+            StageFBPublicSignatureCodec.fromLowercaseHex(signatureHex)
+                ?: return Result.Invalid
+
+        val metadata =
+            StageFBCandidateFingerprint.PublicCandidateMetadata(
+                scoutPublicKey = scoutPublicKey,
+                expectedSignature = expectedSignature,
+                recentBlockhash = recentBlockhash,
+                feeLamports = feeLamports,
+                balanceLamports = balanceLamports,
+                remainingBalanceLamports = remainingBalanceLamports,
+                simulationSlot = simulationSlot,
+                lastValidBlockHeight = lastValidBlockHeight,
+            )
+
+        val fingerprint = StageFBCandidateFingerprint.derive(metadata)
+        if (fingerprint !is StageFBCandidateFingerprint.Result.Valid) {
+            return Result.Invalid
+        }
+
+        val receipt =
+            StageFBCandidateReviewReceipt.create(
+                metadata = metadata,
+                claimedCandidateFingerprintSha256 = fingerprint.fingerprintSha256,
+            )
+        if (receipt !is StageFBCandidateReviewReceipt.Result.Valid) {
+            return Result.Invalid
+        }
+
+        return Result.Valid(
+            Snapshot(
+                metadata = metadata,
+                candidateFingerprintSha256 = fingerprint.fingerprintSha256,
+                reviewReceiptSha256 = receipt.reviewReceiptSha256,
+                unitsConsumed = unitsConsumed,
+            ),
+        )
+    }
 }
