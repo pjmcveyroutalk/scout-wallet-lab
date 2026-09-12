@@ -14,6 +14,8 @@ internal class StageFBAttemptGuard(context: Context) {
     }
 
     internal data class Record(
+        val candidateFingerprintSha256: String,
+        val reviewReceiptSha256: String,
         val expectedSignature: String,
         val attemptStarted: Boolean,
         val lastValidBlockHeight: Long,
@@ -51,6 +53,8 @@ internal class StageFBAttemptGuard(context: Context) {
             return LoadResult.Empty
         }
 
+        val candidateFingerprintSha256 = preferences.getString(KEY_CANDIDATE_FINGERPRINT_SHA256, null)
+        val reviewReceiptSha256 = preferences.getString(KEY_REVIEW_RECEIPT_SHA256, null)
         val expectedSignature = preferences.getString(KEY_EXPECTED_SIGNATURE, null)
         val attemptStarted = preferences.getBoolean(KEY_ATTEMPT_STARTED, false)
         val lastValidBlockHeight = preferences.getLong(KEY_LAST_VALID_BLOCK_HEIGHT, 0L)
@@ -58,6 +62,10 @@ internal class StageFBAttemptGuard(context: Context) {
         val publicStatus = rawStatus?.let(::parseStatus)
 
         if (
+            candidateFingerprintSha256 == null ||
+            !isLowercaseSha256(candidateFingerprintSha256) ||
+            reviewReceiptSha256 == null ||
+            !isLowercaseSha256(reviewReceiptSha256) ||
             expectedSignature == null ||
             !isValidPublicSignature(expectedSignature) ||
             !attemptStarted ||
@@ -69,6 +77,8 @@ internal class StageFBAttemptGuard(context: Context) {
 
         return LoadResult.Present(
             Record(
+                candidateFingerprintSha256 = candidateFingerprintSha256,
+                reviewReceiptSha256 = reviewReceiptSha256,
                 expectedSignature = expectedSignature,
                 attemptStarted = true,
                 lastValidBlockHeight = lastValidBlockHeight,
@@ -78,10 +88,17 @@ internal class StageFBAttemptGuard(context: Context) {
     }
 
     fun beginAttempt(
+        candidateFingerprintSha256: String,
+        reviewReceiptSha256: String,
         expectedSignature: String,
         lastValidBlockHeight: Long,
     ): BeginResult {
-        if (!isValidPublicSignature(expectedSignature) || lastValidBlockHeight <= 0L) {
+        if (
+            !isLowercaseSha256(candidateFingerprintSha256) ||
+            !isLowercaseSha256(reviewReceiptSha256) ||
+            !isValidPublicSignature(expectedSignature) ||
+            lastValidBlockHeight <= 0L
+        ) {
             return BeginResult.INVALID_PUBLIC_METADATA
         }
 
@@ -92,6 +109,8 @@ internal class StageFBAttemptGuard(context: Context) {
         val committed =
             preferences
                 .edit()
+                .putString(KEY_CANDIDATE_FINGERPRINT_SHA256, candidateFingerprintSha256)
+                .putString(KEY_REVIEW_RECEIPT_SHA256, reviewReceiptSha256)
                 .putString(KEY_EXPECTED_SIGNATURE, expectedSignature)
                 .putBoolean(KEY_ATTEMPT_STARTED, true)
                 .putLong(KEY_LAST_VALID_BLOCK_HEIGHT, lastValidBlockHeight)
@@ -105,6 +124,8 @@ internal class StageFBAttemptGuard(context: Context) {
         val persisted = load()
         return if (
             persisted is LoadResult.Present &&
+            persisted.record.candidateFingerprintSha256 == candidateFingerprintSha256 &&
+            persisted.record.reviewReceiptSha256 == reviewReceiptSha256 &&
             persisted.record.expectedSignature == expectedSignature &&
             persisted.record.attemptStarted &&
             persisted.record.lastValidBlockHeight == lastValidBlockHeight &&
@@ -165,6 +186,8 @@ internal class StageFBAttemptGuard(context: Context) {
         val persisted = load()
         return if (
             persisted is LoadResult.Present &&
+            persisted.record.candidateFingerprintSha256 == loaded.record.candidateFingerprintSha256 &&
+            persisted.record.reviewReceiptSha256 == loaded.record.reviewReceiptSha256 &&
             persisted.record.expectedSignature == expectedSignature &&
             persisted.record.publicStatus == nextStatus
         ) {
@@ -205,6 +228,9 @@ internal class StageFBAttemptGuard(context: Context) {
     private fun parseStatus(value: String): PublicStatus? =
         PublicStatus.values().firstOrNull { status -> status.name == value }
 
+    private fun isLowercaseSha256(value: String): Boolean =
+        value.length == SHA256_HEX_LENGTH && value.all { character -> character in LOWERCASE_HEX }
+
     private fun isValidPublicSignature(value: String): Boolean {
         if (value.length !in MIN_SIGNATURE_LENGTH..MAX_SIGNATURE_LENGTH) {
             return false
@@ -215,11 +241,15 @@ internal class StageFBAttemptGuard(context: Context) {
 
     private companion object {
         const val PREFERENCES_NAME = "scout_stage_fb_attempt_guard_v1"
+        const val KEY_CANDIDATE_FINGERPRINT_SHA256 = "candidate_fingerprint_sha256"
+        const val KEY_REVIEW_RECEIPT_SHA256 = "review_receipt_sha256"
         const val KEY_EXPECTED_SIGNATURE = "expected_public_signature"
         const val KEY_ATTEMPT_STARTED = "attempt_started"
         const val KEY_LAST_VALID_BLOCK_HEIGHT = "last_valid_block_height"
         const val KEY_PUBLIC_STATUS = "final_public_status"
 
+        const val SHA256_HEX_LENGTH = 64
+        const val LOWERCASE_HEX = "0123456789abcdef"
         const val MIN_SIGNATURE_LENGTH = 80
         const val MAX_SIGNATURE_LENGTH = 96
         const val BASE58_ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
