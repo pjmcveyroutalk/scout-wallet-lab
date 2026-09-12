@@ -1,0 +1,33 @@
+name: Stage F Presubmit Audit
+
+on:
+  pull_request:
+    paths:
+      - "crates/wallet-engine/src/stage_f_presubmit.rs"
+      - "scripts/stage-f-presubmit-static-audit.sh"
+      - ".github/workflows/stage-f-presubmit-audit.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "crates/wallet-engine/src/stage_f_presubmit.rs"
+      - "scripts/stage-f-presubmit-static-audit.sh"
+      - ".github/workflows/stage-f-presubmit-audit.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust 1.80.0
+        uses: dtolnay/rust-toolchain@1.80.0
+        with:
+          components: rustfmt
+
+      - name: Run Stage F presubmit static audit
+        run: bash scripts/stage-f-presubmit-static-audit.sh
