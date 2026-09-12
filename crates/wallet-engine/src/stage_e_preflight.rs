@@ -394,7 +394,8 @@ mod tests {
     use super::{
         encode_single_signature_transaction, parse_fee_response, parse_simulation_response,
         stage_e_preflight_instruction, validate_fee, GetFeeForMessageResponse,
-        SimulateTransactionResponse, StageEPreflightError, STAGE_E_MAX_FEE_LAMPORTS,
+        GetFeeForMessageResult, SimulateTransactionResponse, SimulateTransactionResult,
+        SimulationContext, SimulationValue, StageEPreflightError, STAGE_E_MAX_FEE_LAMPORTS,
         STAGE_E_PREFLIGHT_PAYLOAD, STAGE_E_PREFLIGHT_PROGRAM_ID,
     };
 
@@ -437,14 +438,16 @@ mod tests {
 
     #[test]
     fn fee_response_requires_value() {
-        let valid: GetFeeForMessageResponse =
-            serde_json::from_str(r#"{"result":{"value":5000},"error":null}"#)
-                .expect("valid test fixture");
+        let valid = GetFeeForMessageResponse {
+            result: Some(GetFeeForMessageResult { value: Some(5_000) }),
+            error: None,
+        };
         assert_eq!(parse_fee_response(valid), Ok(5_000));
 
-        let missing: GetFeeForMessageResponse =
-            serde_json::from_str(r#"{"result":{"value":null},"error":null}"#)
-                .expect("valid test fixture");
+        let missing = GetFeeForMessageResponse {
+            result: Some(GetFeeForMessageResult { value: None }),
+            error: None,
+        };
         assert_eq!(
             parse_fee_response(missing),
             Err(StageEPreflightError::InvalidResponse)
@@ -453,16 +456,28 @@ mod tests {
 
     #[test]
     fn simulation_response_requires_clean_execution_and_units() {
-        let valid: SimulateTransactionResponse = serde_json::from_str(
-            r#"{"result":{"context":{"slot":123},"value":{"err":null,"unitsConsumed":456}},"error":null}"#,
-        )
-        .expect("valid test fixture");
+        let valid = SimulateTransactionResponse {
+            result: Some(SimulateTransactionResult {
+                context: SimulationContext { slot: 123 },
+                value: SimulationValue {
+                    err: None,
+                    units_consumed: Some(456),
+                },
+            }),
+            error: None,
+        };
         assert_eq!(parse_simulation_response(valid), Ok((123, 456)));
 
-        let rejected: SimulateTransactionResponse = serde_json::from_str(
-            r#"{"result":{"context":{"slot":123},"value":{"err":{"InstructionError":[0,"Custom"]},"unitsConsumed":456}},"error":null}"#,
-        )
-        .expect("valid test fixture");
+        let rejected = SimulateTransactionResponse {
+            result: Some(SimulateTransactionResult {
+                context: SimulationContext { slot: 123 },
+                value: SimulationValue {
+                    err: Some(serde_json::Value::Bool(true)),
+                    units_consumed: Some(456),
+                },
+            }),
+            error: None,
+        };
         assert_eq!(
             parse_simulation_response(rejected),
             Err(StageEPreflightError::RpcRejected)
