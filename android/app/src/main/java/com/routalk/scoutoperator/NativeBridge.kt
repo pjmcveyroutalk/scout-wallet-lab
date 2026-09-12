@@ -14,6 +14,7 @@ internal object NativeBridge {
     external fun devnetBlockHeight(): String
     external fun signStageCDevnetProof(vaultJson: String, passphraseBytes: ByteArray): String
     external fun createLockedDevnetVault(passphraseBytes: ByteArray): String
+    external fun verifyLockedDevnetPassphrase(vaultJson: String, passphraseBytes: ByteArray): String
     external fun lockedVaultDevnetAddress(vaultJson: String): String
     external fun lockedVaultDevnetBalance(vaultJson: String): String
     external fun lockedVaultDevnetHistory(vaultJson: String): String
