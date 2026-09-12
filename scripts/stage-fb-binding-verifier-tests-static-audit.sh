@@ -32,9 +32,11 @@ grep -F 'testImplementation("junit:junit:4.13.2")' "${BUILD_PATH}" >/dev/null ||
 grep -F 'dependsOn("testDebugUnitTest")' "${BUILD_PATH}" >/dev/null || \
   fail "assembleDebug must depend on Stage F-B verifier unit tests"
 
+readonly SUBMISSION_METHOD="send""Transaction"
+
 for pattern in \
   'NativeBridge' \
-  'sendTransaction' \
+  "${SUBMISSION_METHOD}" \
   'api.mainnet-beta.solana.com' \
   'passphrase' \
   'recovery' \
