@@ -1,6 +1,4 @@
-use super::devnet_signing_coordinator::{
-    DevnetSigningCoordinator, DevnetSigningCoordinatorError,
-};
+use super::devnet_signing_coordinator::{DevnetSigningCoordinator, DevnetSigningCoordinatorError};
 use crate::{
     CanonicalTransactionMessage, Cluster, DevnetRpc, ExecutionPolicy, PreparedTransaction, RpcError,
     SignatureBytes,
@@ -350,10 +348,7 @@ fn validate_single_signer_message(
     Ok(())
 }
 
-fn encode_single_signature_transaction(
-    signature: [u8; 64],
-    message_bytes: &[u8],
-) -> Vec<u8> {
+fn encode_single_signature_transaction(signature: [u8; 64], message_bytes: &[u8]) -> Vec<u8> {
     let mut transaction = Vec::with_capacity(1 + signature.len() + message_bytes.len());
     transaction.push(1_u8);
     transaction.extend_from_slice(&signature);
