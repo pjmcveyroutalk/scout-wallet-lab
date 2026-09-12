@@ -1,0 +1,309 @@
+[1m[32m    Updating[0m crates.io index
+[1m[32m Downloading[0m crates ...
+[1m[32m  Downloaded[0m aead v0.5.2
+[1m[32m  Downloaded[0m bytes v1.12.1
+[1m[32m  Downloaded[0m rustc_version v0.4.1
+[1m[32m  Downloaded[0m bitcoin_hashes v0.14.101
+[1m[32m  Downloaded[0m tinyvec_macros v0.1.1
+[1m[32m  Downloaded[0m untrusted v0.9.0
+[1m[32m  Downloaded[0m form_urlencoded v1.2.2
+[1m[32m  Downloaded[0m version_check v0.9.5
+[1m[32m  Downloaded[0m tower-layer v0.3.3
+[1m[32m  Downloaded[0m utf8_iter v1.0.4
+[1m[32m  Downloaded[0m want v0.3.1
+[1m[32m  Downloaded[0m hyper-rustls v0.27.7
+[1m[32m  Downloaded[0m zeroize v1.8.1
+[1m[32m  Downloaded[0m ed25519-dalek v2.1.1
+[1m[32m  Downloaded[0m unicode-ident v1.0.24
+[1m[32m  Downloaded[0m try-lock v0.2.5
+[1m[32m  Downloaded[0m serde_urlencoded v0.7.1
+[1m[32m  Downloaded[0m poly1305 v0.8.0
+[1m[32m  Downloaded[0m spki v0.7.3
+[1m[32m  Downloaded[0m pin-project-lite v0.2.17
+[1m[32m  Downloaded[0m tokio-rustls v0.26.5
+[1m[32m  Downloaded[0m unicode-joining-type v1.0.0
+[1m[32m  Downloaded[0m webpki-roots v1.0.9
+[1m[32m  Downloaded[0m tracing-core v0.1.36
+[1m[32m  Downloaded[0m url v2.5.8
+[1m[32m  Downloaded[0m typenum v1.20.1
+[1m[32m  Downloaded[0m serde_derive v1.0.217
+[1m[32m  Downloaded[0m unicode-normalization v0.1.25
+[1m[32m  Downloaded[0m serde_json v1.0.137
+[1m[32m  Downloaded[0m syn v2.0.119
+[1m[32m  Downloaded[0m curve25519-dalek v4.1.3
+[1m[32m  Downloaded[0m tracing v0.1.44
+[1m[32m  Downloaded[0m rustls v0.23.43
+[1m[32m  Downloaded[0m reqwest v0.12.18
+[1m[32m  Downloaded[0m tokio v1.53.1
+[1m[32m  Downloaded[0m libc v0.2.189
+[1m[32m  Downloaded[0m socket2 v0.6.5
+[1m[32m  Downloaded[0m rustls-pki-types v1.15.1
+[1m[32m  Downloaded[0m ring v0.17.14
+[1m[32m  Downloaded[0m mio v1.2.3
+[1m[32m  Downloaded[0m cc v1.4.5
+[1m[32m  Downloaded[0m ryu v1.0.23
+[1m[32m  Downloaded[0m proc-macro2 v1.0.107
+[1m[32m  Downloaded[0m log v0.4.34
+[1m[32m  Downloaded[0m ipnet v2.12.2
+[1m[32m  Downloaded[0m hyper v1.11.1
+[1m[32m  Downloaded[0m const-oid v0.9.6
+[1m[32m  Downloaded[0m chacha20poly1305 v0.10.1
+[1m[32m  Downloaded[0m blake2 v0.10.6
+[1m[32m  Downloaded[0m solana-pubkey v2.2.1
+[1m[32m  Downloaded[0m solana-hash v2.3.0
+[1m[32m  Downloaded[0m sha2 v0.10.9
+[1m[32m  Downloaded[0m quote v1.0.47
+[1m[32m  Downloaded[0m pkcs8 v0.10.2
+[1m[32m  Downloaded[0m password-hash v0.5.0
+[1m[32m  Downloaded[0m once_cell v1.21.4
+[1m[32m  Downloaded[0m lazy_static v1.5.0
+[1m[32m  Downloaded[0m futures-channel v0.3.34
+[1m[32m  Downloaded[0m five8_core v0.1.2
+[1m[32m  Downloaded[0m digest v0.10.7
+[1m[32m  Downloaded[0m tower-http v0.6.11
+[1m[32m  Downloaded[0m solana-sdk-ids v2.2.1
+[1m[32m  Downloaded[0m solana-sanitize v2.2.1
+[1m[32m  Downloaded[0m solana-instruction v2.2.1
+[1m[32m  Downloaded[0m smallvec v1.16.0
+[1m[32m  Downloaded[0m slab v0.4.12
+[1m[32m  Downloaded[0m futures-task v0.3.34
+[1m[32m  Downloaded[0m curve25519-dalek-derive v0.1.1
+[1m[32m  Downloaded[0m cpufeatures v0.2.17
+[1m[32m  Downloaded[0m block-buffer v0.10.4
+[1m[32m  Downloaded[0m tower v0.5.3
+[1m[32m  Downloaded[0m solana-atomic-u64 v2.2.1
+[1m[32m  Downloaded[0m shlex v2.0.1
+[1m[32m  Downloaded[0m itoa v1.0.18
+[1m[32m  Downloaded[0m idna_adapter v1.1.0
+[1m[32m  Downloaded[0m futures-sink v0.3.34
+[1m[32m  Downloaded[0m futures-io v0.3.34
+[1m[32m  Downloaded[0m cfg-if v1.0.4
+[1m[32m  Downloaded[0m unicode-bidi v0.3.18
+[1m[32m  Downloaded[0m solana-decode-error v2.3.0
+[1m[32m  Downloaded[0m signature v2.2.0
+[1m[32m  Downloaded[0m percent-encoding v2.3.2
+[1m[32m  Downloaded[0m opaque-debug v0.3.1
+[1m[32m  Downloaded[0m http-body v1.1.0
+[1m[32m  Downloaded[0m solana-message v2.2.1
+[1m[32m  Downloaded[0m semver v1.0.28
+[1m[32m  Downloaded[0m rand_core v0.6.4
+[1m[32m  Downloaded[0m getrandom v0.2.15
+[1m[32m  Downloaded[0m five8 v0.2.1
+[1m[32m  Downloaded[0m find-msvc-tools v0.1.12
+[1m[32m  Downloaded[0m memchr v2.8.3
+[1m[32m  Downloaded[0m inout v0.1.4
+[1m[32m  Downloaded[0m idna_mapping v1.1.0
+[1m[32m  Downloaded[0m futures-util v0.3.34
+[1m[32m  Downloaded[0m chacha20 v0.9.1
+[1m[32m  Downloaded[0m bs58 v0.5.1
+[1m[32m  Downloaded[0m solana-sha256-hasher v2.3.0
+[1m[32m  Downloaded[0m mime v0.3.17
+[1m[32m  Downloaded[0m ed25519 v2.2.3
+[1m[32m  Downloaded[0m bitflags v2.13.1
+[1m[32m  Downloaded[0m num-traits v0.2.19
+[1m[32m  Downloaded[0m httparse v1.10.1
+[1m[32m  Downloaded[0m http-body-util v0.1.5
+[1m[32m  Downloaded[0m hex-conservative v0.2.3
+[1m[32m  Downloaded[0m generic-array v0.14.7
+[1m[32m  Downloaded[0m der v0.7.10
+[1m[32m  Downloaded[0m crypto-common v0.1.7
+[1m[32m  Downloaded[0m idna v1.1.0
+[1m[32m  Downloaded[0m hyper-util v0.1.20
+[1m[32m  Downloaded[0m five8_const v0.1.4
+[1m[32m  Downloaded[0m cipher v0.4.4
+[1m[32m  Downloaded[0m rustls-webpki v0.103.15
+[1m[32m  Downloaded[0m base64 v0.22.1
+[1m[32m  Downloaded[0m futures-core v0.3.34
+[1m[32m  Downloaded[0m universal-hash v0.5.1
+[1m[32m  Downloaded[0m tower-service v0.3.3
+[1m[32m  Downloaded[0m tinyvec v1.13.2
+[1m[32m  Downloaded[0m subtle v2.6.1
+[1m[32m  Downloaded[0m solana-transaction-error v2.2.1
+[1m[32m  Downloaded[0m solana-short-vec v2.2.1
+[1m[32m  Downloaded[0m serde v1.0.217
+[1m[32m  Downloaded[0m bip39 v2.2.2
+[1m[32m  Downloaded[0m atomic-waker v1.1.2
+[1m[32m  Downloaded[0m sync_wrapper v1.0.2
+[1m[32m  Downloaded[0m http v1.5.0
+[1m[32m  Downloaded[0m bincode v1.3.3
+[1m[32m  Downloaded[0m autocfg v1.5.1
+[1m[32m  Downloaded[0m arrayvec v0.7.8
+[1m[32m  Downloaded[0m base64ct v1.6.0
+[1m[32m  Downloaded[0m argon2 v0.5.3
+[1m[32m   Compiling[0m libc v0.2.189
+[1m[32m    Checking[0m cfg-if v1.0.4
+[1m[32m   Compiling[0m version_check v0.9.5
+[1m[32m    Checking[0m typenum v1.20.1
+[1m[32m   Compiling[0m proc-macro2 v1.0.107
+[1m[32m   Compiling[0m generic-array v0.14.7
+[1m[32m   Compiling[0m unicode-ident v1.0.24
+[1m[32m    Checking[0m subtle v2.6.1
+[1m[32m   Compiling[0m quote v1.0.47
+[1m[32m    Checking[0m zeroize v1.8.1
+[1m[32m   Compiling[0m serde v1.0.217
+[1m[32m    Checking[0m cpufeatures v0.2.17
+[1m[32m   Compiling[0m syn v2.0.119
+[1m[32m    Checking[0m block-buffer v0.10.4
+[1m[32m    Checking[0m pin-project-lite v0.2.17
+[1m[32m    Checking[0m bytes v1.12.1
+[1m[32m    Checking[0m futures-core v0.3.34
+[1m[32m   Compiling[0m semver v1.0.28
+[1m[32m    Checking[0m getrandom v0.2.15
+[1m[32m    Checking[0m rand_core v0.6.4
+[1m[32m    Checking[0m itoa v1.0.18
+[1m[32m    Checking[0m crypto-common v0.1.7
+[1m[32m   Compiling[0m find-msvc-tools v0.1.12
+[1m[32m    Checking[0m digest v0.10.7
+[1m[32m   Compiling[0m shlex v2.0.1
+[1m[32m   Compiling[0m cc v1.4.5
+[1m[32m   Compiling[0m rustc_version v0.4.1
+[1m[32m    Checking[0m five8_core v0.1.2
+[1m[32m   Compiling[0m autocfg v1.5.1
+[1m[32m   Compiling[0m curve25519-dalek v4.1.3
+[1m[32m   Compiling[0m num-traits v0.2.19
+[1m[32m    Checking[0m mio v1.2.3
+[1m[32m    Checking[0m socket2 v0.6.5
+[1m[32m   Compiling[0m unicode-joining-type v1.0.0
+[1m[32m    Checking[0m futures-sink v0.3.34
+[1m[32m    Checking[0m tokio v1.53.1
+[1m[32m   Compiling[0m ring v0.17.14
+[1m[32m    Checking[0m five8 v0.2.1
+[1m[32m    Checking[0m sha2 v0.10.9
+[1m[32m    Checking[0m http v1.5.0
+[1m[32m    Checking[0m solana-atomic-u64 v2.2.1
+[1m[32m    Checking[0m percent-encoding v2.3.2
+[1m[32m    Checking[0m tinyvec_macros v0.1.1
+[1m[32m    Checking[0m memchr v2.8.3
+[1m[32m    Checking[0m once_cell v1.21.4
+[1m[32m    Checking[0m smallvec v1.16.0
+[1m[32m    Checking[0m solana-sanitize v2.2.1
+[1m[32m    Checking[0m tinyvec v1.13.2
+[1m[32m   Compiling[0m serde_derive v1.0.217
+[1m[32m   Compiling[0m curve25519-dalek-derive v0.1.1
+[1m[32m    Checking[0m http-body v1.1.0
+[1m[32m    Checking[0m rustls-pki-types v1.15.1
+[1m[32m    Checking[0m futures-io v0.3.34
+[1m[32m    Checking[0m slab v0.4.12
+[1m[32m    Checking[0m futures-task v0.3.34
+[1m[32m   Compiling[0m httparse v1.10.1
+[1m[32m    Checking[0m untrusted v0.9.0
+[1m[32m    Checking[0m futures-util v0.3.34
+[1m[32m    Checking[0m idna_mapping v1.1.0
+[1m[32m    Checking[0m solana-decode-error v2.3.0
+[1m[32m    Checking[0m unicode-normalization v0.1.25
+[1m[32m    Checking[0m five8_const v0.1.4
+[1m[32m    Checking[0m unicode-bidi v0.3.18
+[1m[32m    Checking[0m try-lock v0.2.5
+[1m[32m    Checking[0m tower-service v0.3.3
+[1m[32m   Compiling[0m rustls v0.23.43
+[1m[32m    Checking[0m bs58 v0.5.1
+[1m[32m    Checking[0m idna_adapter v1.1.0
+[1m[32m    Checking[0m want v0.3.1
+[1m[32m    Checking[0m rustls-webpki v0.103.15
+[1m[32m    Checking[0m tracing-core v0.1.36
+[1m[32m    Checking[0m form_urlencoded v1.2.2
+[1m[32m    Checking[0m futures-channel v0.3.34
+[1m[32m    Checking[0m atomic-waker v1.1.2
+[1m[32m    Checking[0m utf8_iter v1.0.4
+[1m[32m    Checking[0m idna v1.1.0
+[1m[32m    Checking[0m hyper v1.11.1
+[1m[32m    Checking[0m tracing v0.1.44
+[1m[32m    Checking[0m sync_wrapper v1.0.2
+[1m[32m    Checking[0m inout v0.1.4
+[1m[32m    Checking[0m base64 v0.22.1
+[1m[32m    Checking[0m tower-layer v0.3.3
+[1m[32m   Compiling[0m serde_json v1.0.137
+[1m[32m    Checking[0m arrayvec v0.7.8
+[1m[32m    Checking[0m ipnet v2.12.2
+[1m[32m    Checking[0m ryu v1.0.23
+[1m[32m    Checking[0m hex-conservative v0.2.3
+[1m[32m    Checking[0m hyper-util v0.1.20
+[1m[32m    Checking[0m tower v0.5.3
+[1m[32m    Checking[0m cipher v0.4.4
+[1m[32m    Checking[0m url v2.5.8
+[1m[32m    Checking[0m webpki-roots v1.0.9
+[1m[32m    Checking[0m universal-hash v0.5.1
+[1m[32m    Checking[0m opaque-debug v0.3.1
+[1m[32m    Checking[0m signature v2.2.0
+[1m[32m    Checking[0m base64ct v1.6.0
+[1m[32m    Checking[0m bitflags v2.13.1
+[1m[32m    Checking[0m tower-http v0.6.11
+[1m[32m    Checking[0m password-hash v0.5.0
+[1m[32m    Checking[0m ed25519 v2.2.3
+[1m[32m    Checking[0m poly1305 v0.8.0
+[1m[32m    Checking[0m chacha20 v0.9.1
+[1m[32m    Checking[0m bitcoin_hashes v0.14.101
+[1m[32m    Checking[0m http-body-util v0.1.5
+[1m[32m    Checking[0m solana-hash v2.3.0
+[1m[32m    Checking[0m solana-sha256-hasher v2.3.0
+[1m[32m    Checking[0m solana-pubkey v2.2.1
+[1m[32m    Checking[0m tokio-rustls v0.26.5
+[1m[32m    Checking[0m solana-instruction v2.2.1
+[1m[32m    Checking[0m solana-transaction-error v2.2.1
+[1m[32m    Checking[0m solana-sdk-ids v2.2.1
+[1m[32m    Checking[0m hyper-rustls v0.27.7
+[1m[32m    Checking[0m serde_urlencoded v0.7.1
+[1m[32m    Checking[0m solana-short-vec v2.2.1
+[1m[32m    Checking[0m blake2 v0.10.6
+[1m[32m    Checking[0m aead v0.5.2
+[1m[32m    Checking[0m lazy_static v1.5.0
+[1m[32m    Checking[0m mime v0.3.17
+[1m[32m    Checking[0m log v0.4.34
+[1m[32m    Checking[0m argon2 v0.5.3
+[1m[32m    Checking[0m bip39 v2.2.2
+[1m[32m    Checking[0m solana-message v2.2.1
+[1m[32m    Checking[0m reqwest v0.12.18
+[1m[32m    Checking[0m chacha20poly1305 v0.10.1
+[1m[32m    Checking[0m bincode v1.3.3
+[1m[32m    Checking[0m ed25519-dalek v2.1.1
+[1m[32m    Checking[0m wallet-engine v0.1.0 (/home/runner/work/scout-wallet-lab/scout-wallet-lab/crates/wallet-engine)
+[0m[1m[38;5;9merror[0m[0m[1m: used `expect()` on a `Result` value[0m
+[0m   [0m[0m[1m[38;5;12m--> [0m[0mcrates/wallet-engine/src/stage_e_preflight.rs:441:13[0m
+[0m    [0m[0m[1m[38;5;12m|[0m
+[0m[1m[38;5;12m441[0m[0m [0m[0m[1m[38;5;12m|[0m[0m [0m[0m[1m[38;5;9m/[0m[0m [0m[0m            serde_json::from_str(r#"{"result":{"value":5000},"error":null}"#)[0m
+[0m[1m[38;5;12m442[0m[0m [0m[0m[1m[38;5;12m|[0m[0m [0m[0m[1m[38;5;9m|[0m[0m [0m[0m                .expect("valid test fixture");[0m
+[0m    [0m[0m[1m[38;5;12m|[0m[0m [0m[0m[1m[38;5;9m|_____________________________________________^[0m
+[0m    [0m[0m[1m[38;5;12m|[0m
+[0m    [0m[0m[1m[38;5;12m= [0m[0m[1mnote[0m[0m: if this value is an `Err`, it will panic[0m
+[0m    [0m[0m[1m[38;5;12m= [0m[0m[1mhelp[0m[0m: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#expect_used[0m
+[0m    [0m[0m[1m[38;5;12m= [0m[0m[1mnote[0m[0m: requested on the command line with `-D clippy::expect-used`[0m
+
+[0m[1m[38;5;9merror[0m[0m[1m: used `expect()` on a `Result` value[0m
+[0m   [0m[0m[1m[38;5;12m--> [0m[0mcrates/wallet-engine/src/stage_e_preflight.rs:446:13[0m
+[0m    [0m[0m[1m[38;5;12m|[0m
+[0m[1m[38;5;12m446[0m[0m [0m[0m[1m[38;5;12m|[0m[0m [0m[0m[1m[38;5;9m/[0m[0m [0m[0m            serde_json::from_str(r#"{"result":{"value":null},"error":null}"#)[0m
+[0m[1m[38;5;12m447[0m[0m [0m[0m[1m[38;5;12m|[0m[0m [0m[0m[1m[38;5;9m|[0m[0m [0m[0m                .expect("valid test fixture");[0m
+[0m    [0m[0m[1m[38;5;12m|[0m[0m [0m[0m[1m[38;5;9m|_____________________________________________^[0m
+[0m    [0m[0m[1m[38;5;12m|[0m
+[0m    [0m[0m[1m[38;5;12m= [0m[0m[1mnote[0m[0m: if this value is an `Err`, it will panic[0m
+[0m    [0m[0m[1m[38;5;12m= [0m[0m[1mhelp[0m[0m: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#expect_used[0m
+
+[0m[1m[38;5;9merror[0m[0m[1m: used `expect()` on a `Result` value[0m
+[0m   [0m[0m[1m[38;5;12m--> [0m[0mcrates/wallet-engine/src/stage_e_preflight.rs:456:50[0m
+[0m    [0m[0m[1m[38;5;12m|[0m
+[0m[1m[38;5;12m456[0m[0m [0m[0m[1m[38;5;12m|[0m[0m   [0m[0m        let valid: SimulateTransactionResponse = serde_json::from_str([0m
+[0m    [0m[0m[1m[38;5;12m|[0m[0m  [0m[0m[1m[38;5;9m__________________________________________________^[0m
+[0m[1m[38;5;12m457[0m[0m [0m[0m[1m[38;5;12m|[0m[0m [0m[0m[1m[38;5;9m|[0m[0m [0m[0m            r#"{"result":{"context":{"slot":123},"value":{"err":null,"unitsConsumed":456}},"error":null}"#,[0m
+[0m[1m[38;5;12m458[0m[0m [0m[0m[1m[38;5;12m|[0m[0m [0m[0m[1m[38;5;9m|[0m[0m [0m[0m        )[0m
+[0m[1m[38;5;12m459[0m[0m [0m[0m[1m[38;5;12m|[0m[0m [0m[0m[1m[38;5;9m|[0m[0m [0m[0m        .expect("valid test fixture");[0m
+[0m    [0m[0m[1m[38;5;12m|[0m[0m [0m[0m[1m[38;5;9m|_____________________________________^[0m
+[0m    [0m[0m[1m[38;5;12m|[0m
+[0m    [0m[0m[1m[38;5;12m= [0m[0m[1mnote[0m[0m: if this value is an `Err`, it will panic[0m
+[0m    [0m[0m[1m[38;5;12m= [0m[0m[1mhelp[0m[0m: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#expect_used[0m
+
+[0m[1m[38;5;9merror[0m[0m[1m: used `expect()` on a `Result` value[0m
+[0m   [0m[0m[1m[38;5;12m--> [0m[0mcrates/wallet-engine/src/stage_e_preflight.rs:462:53[0m
+[0m    [0m[0m[1m[38;5;12m|[0m
+[0m[1m[38;5;12m462[0m[0m [0m[0m[1m[38;5;12m|[0m[0m   [0m[0m        let rejected: SimulateTransactionResponse = serde_json::from_str([0m
+[0m    [0m[0m[1m[38;5;12m|[0m[0m  [0m[0m[1m[38;5;9m_____________________________________________________^[0m
+[0m[1m[38;5;12m463[0m[0m [0m[0m[1m[38;5;12m|[0m[0m [0m[0m[1m[38;5;9m|[0m[0m [0m[0m            r#"{"result":{"context":{"slot":123},"value":{"err":{"InstructionError":[0,"Custom"]},"unitsConsumed":456}},"error":null}"#,[0m
+[0m[1m[38;5;12m464[0m[0m [0m[0m[1m[38;5;12m|[0m[0m [0m[0m[1m[38;5;9m|[0m[0m [0m[0m        )[0m
+[0m[1m[38;5;12m465[0m[0m [0m[0m[1m[38;5;12m|[0m[0m [0m[0m[1m[38;5;9m|[0m[0m [0m[0m        .expect("valid test fixture");[0m
+[0m    [0m[0m[1m[38;5;12m|[0m[0m [0m[0m[1m[38;5;9m|_____________________________________^[0m
+[0m    [0m[0m[1m[38;5;12m|[0m
+[0m    [0m[0m[1m[38;5;12m= [0m[0m[1mnote[0m[0m: if this value is an `Err`, it will panic[0m
+[0m    [0m[0m[1m[38;5;12m= [0m[0m[1mhelp[0m[0m: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#expect_used[0m
+
+[1m[31merror[0m[1m:[0m could not compile `wallet-engine` (lib test) due to 4 previous errors
+
+CLIPPY_EXIT_STATUS=101
