@@ -38,6 +38,14 @@ require_text \
   "binding check must re-derive the candidate review receipt"
 
 require_text \
+  "guardRecord.candidateFingerprintSha256 != receipt.candidateFingerprintSha256" \
+  "binding check must require the persisted candidate fingerprint to match the re-derived fingerprint"
+
+require_text \
+  "guardRecord.reviewReceiptSha256 != receipt.reviewReceiptSha256" \
+  "binding check must require the persisted review receipt to match the re-derived receipt"
+
+require_text \
   "guardRecord.expectedSignature != metadata.expectedSignature" \
   "binding check must bind the guard to the exact public signature"
 
