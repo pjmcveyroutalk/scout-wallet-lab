@@ -17,6 +17,10 @@
             android:exported="false" />
 
         <activity
+            android:name=".StageFBGateActivity"
+            android:exported="false" />
+
+        <activity
             android:name=".StageFPresubmitActivity"
             android:exported="false" />
 

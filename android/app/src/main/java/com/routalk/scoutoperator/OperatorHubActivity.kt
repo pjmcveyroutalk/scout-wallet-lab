@@ -48,7 +48,7 @@ class OperatorHubActivity : Activity() {
         root.addView(text("DEVNET ONLY", 18f))
         root.addView(
             text(
-                "Choose an explicit operator gate. Mainnet and ledger submission remain disabled.",
+                "Choose an explicit operator gate. Mainnet remains disabled.",
                 15f,
             ),
         )
@@ -135,7 +135,7 @@ class OperatorHubActivity : Activity() {
             ),
         )
 
-        val stageF =
+        val stageFA =
             Button(this).apply {
                 text = "STAGE F-A DEVNET PRESUBMIT PROOF"
                 contentDescription =
@@ -149,12 +149,36 @@ class OperatorHubActivity : Activity() {
                     )
                 }
             }
-        fullWidth(stageF)
-        root.addView(stageF)
+        fullWidth(stageFA)
+        root.addView(stageFA)
 
         root.addView(
             text(
-                "Stage F-A prepares one fixed Memo candidate, checks its fee and remaining-balance floor, signs and signature-verifies it in Devnet simulation, and holds the candidate only in process memory until discard. Ledger submission remains disabled.",
+                "Stage F-A prepares one fixed Memo candidate, checks its fee and remaining-balance floor, signs and signature-verifies it in Devnet simulation, and holds the candidate only in process memory until discard. Ledger submission remains disabled in Stage F-A.",
+                14f,
+            ),
+        )
+
+        val stageFB =
+            Button(this).apply {
+                text = "STAGE F-B DEVNET LEDGER GATE"
+                contentDescription =
+                    "Open the separate Scout Stage F-B Devnet ledger gate"
+                setOnClickListener {
+                    startActivity(
+                        Intent(
+                            this@OperatorHubActivity,
+                            StageFBGateActivity::class.java,
+                        ),
+                    )
+                }
+            }
+        fullWidth(stageFB)
+        root.addView(stageFB)
+
+        root.addView(
+            text(
+                "Stage F-B is the next separate operator gate. Its ledger-write action is not armed in this build; the screen exists so the boundary can be developed and tested without changing Stage F-A.",
                 14f,
             ),
         )
