@@ -118,6 +118,11 @@ class StageFBGateActivity : Activity() {
                     append(loaded.record.publicStatus.name)
                     append("\nLast valid block height: ")
                     append(loaded.record.lastValidBlockHeight)
+                    append("\nCandidate fingerprint SHA-256: ")
+                    append(loaded.record.candidateFingerprintSha256)
+                    append("\nReview receipt SHA-256: ")
+                    append(loaded.record.reviewReceiptSha256)
+                    append("\nBINDING OBSERVATION ONLY — EXECUTION NOT AUTHORIZED")
                     append("\nNo replay or second attempt is available from this screen.")
                 }
         }
