@@ -17,6 +17,10 @@
             android:exported="false" />
 
         <activity
+            android:name=".StageDProofActivity"
+            android:exported="false" />
+
+        <activity
             android:name=".CredentialRekeyActivity"
             android:exported="false" />
 
@@ -27,6 +31,16 @@
         <activity
             android:name=".MainActivity"
             android:exported="false" />
+
+        <activity
+            android:name=".OperatorHubActivity"
+            android:exported="true"
+            android:label="Scout Stage D">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
 
         <activity
             android:name=".CredentialRecoveryActivity"

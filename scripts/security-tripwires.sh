@@ -11,6 +11,8 @@ readonly CREDENTIAL_RECOVERY_NATIVE_PATH="android/native/src/credential_recovery
 readonly CREDENTIAL_RECOVERY_ACTIVITY_PATH="android/app/src/main/java/com/routalk/scoutoperator/CredentialRecoveryActivity.kt"
 readonly CREDENTIAL_REKEY_NATIVE_PATH="android/native/src/credential_rekey.rs"
 readonly CREDENTIAL_REKEY_ACTIVITY_PATH="android/app/src/main/java/com/routalk/scoutoperator/CredentialRekeyActivity.kt"
+readonly STAGE_D_ACTIVITY_PATH="android/app/src/main/java/com/routalk/scoutoperator/StageDProofActivity.kt"
+readonly OPERATOR_HUB_ACTIVITY_PATH="android/app/src/main/java/com/routalk/scoutoperator/OperatorHubActivity.kt"
 readonly ANDROID_MANIFEST_PATH="android/app/src/main/AndroidManifest.xml"
 readonly SIGNING_DESIGN_DOC="docs/DEVNET_SIGNING_BOUNDARY_V1.md"
 
@@ -189,6 +191,83 @@ assert_present_in_path \
   "NativeBridge_signStageCDevnetProof" \
   "${ANDROID_NATIVE_PATH}" \
   "narrow JNI Stage C signing export is missing"
+
+echo "Checking Stage D physical proof boundary..."
+
+assert_present_in_path \
+  "NativeBridge.signStageCDevnetProof(" \
+  "${STAGE_D_ACTIVITY_PATH}" \
+  "Stage D must use only the fixed Stage C signing request"
+
+assert_present_in_path \
+  "TRANSACTION SUBMISSION — DISABLED" \
+  "${STAGE_D_ACTIVITY_PATH}" \
+  "Stage D transaction-submission safety statement is missing"
+
+assert_present_in_path \
+  "MAINNET — DISABLED" \
+  "${STAGE_D_ACTIVITY_PATH}" \
+  "Stage D Mainnet safety statement is missing"
+
+assert_present_in_path \
+  "ARBITRARY SIGNING — DISABLED" \
+  "${STAGE_D_ACTIVITY_PATH}" \
+  "Stage D arbitrary-signing safety statement is missing"
+
+assert_present_in_path \
+  "StageDProofActivity::class.java" \
+  "${OPERATOR_HUB_ACTIVITY_PATH}" \
+  "Stage D operator hub launcher is missing"
+
+assert_absent_in_path \
+  "sendTransaction" \
+  "${STAGE_D_ACTIVITY_PATH}" \
+  "Stage D must never submit a transaction"
+
+assert_absent_in_path \
+  "signTransaction" \
+  "${STAGE_D_ACTIVITY_PATH}" \
+  "Stage D generic transaction signing is forbidden"
+
+assert_absent_in_path \
+  "signMessage" \
+  "${STAGE_D_ACTIVITY_PATH}" \
+  "Stage D arbitrary-message signing is forbidden"
+
+assert_absent_in_path \
+  "signBytes" \
+  "${STAGE_D_ACTIVITY_PATH}" \
+  "Stage D arbitrary-byte signing is forbidden"
+
+assert_absent_in_path \
+  "createLockedDevnetVault" \
+  "${STAGE_D_ACTIVITY_PATH}" \
+  "Stage D must not create or replace the wallet"
+
+assert_absent_in_path \
+  "rekeyLockedDevnetVault" \
+  "${STAGE_D_ACTIVITY_PATH}" \
+  "Stage D must not re-key the wallet"
+
+assert_absent_in_path \
+  "exportLockedVaultRecoveryWords" \
+  "${STAGE_D_ACTIVITY_PATH}" \
+  "Stage D must not export recovery words"
+
+assert_absent_in_path \
+  "ClipboardManager" \
+  "${STAGE_D_ACTIVITY_PATH}" \
+  "Stage D proof metadata must not be copied to the clipboard"
+
+if ! grep -A2 'android:name=".StageDProofActivity"' "${ANDROID_MANIFEST_PATH}" | \
+  grep --fixed-strings 'android:exported="false"' >/dev/null 2>&1; then
+  fail "Stage D proof activity must remain non-exported"
+fi
+
+if ! grep -A6 'android:name=".CredentialRecoveryActivity"' "${ANDROID_MANIFEST_PATH}" | \
+  grep --fixed-strings 'android.intent.category.LAUNCHER' >/dev/null 2>&1; then
+  fail "normal Scout credential-recovery launcher must remain intact for updater compatibility"
+fi
 
 echo "Checking credential recovery boundary..."
 
