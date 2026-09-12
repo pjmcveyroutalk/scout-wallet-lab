@@ -302,8 +302,12 @@ mod tests {
 
         let signed = coordinator.sign_stage_c_proof(lease)?;
         let instruction = stage_c_proof_instruction()?;
-        let canonical = CanonicalTransactionMessage::new(&[instruction.clone()], payer, blockhash)
-            .map_err(|_| DevnetSigningCoordinatorError::InvalidCanonicalMessage)?;
+        let canonical = CanonicalTransactionMessage::new(
+            std::slice::from_ref(&instruction),
+            payer,
+            blockhash,
+        )
+        .map_err(|_| DevnetSigningCoordinatorError::InvalidCanonicalMessage)?;
 
         assert_eq!(instruction.program_id.to_string(), STAGE_C_PROOF_PROGRAM_ID);
         assert_eq!(instruction.data, STAGE_C_PROOF_PAYLOAD);
