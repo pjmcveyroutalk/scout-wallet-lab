@@ -16,6 +16,10 @@
             android:exported="false" />
 
         <activity
+            android:name=".StageDProofActivity"
+            android:exported="false" />
+
+        <activity
             android:name=".MainActivity"
             android:exported="true">
             <intent-filter>
