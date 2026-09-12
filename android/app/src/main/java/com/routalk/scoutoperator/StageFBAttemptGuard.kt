@@ -138,6 +138,8 @@ internal class StageFBAttemptGuard(context: Context) {
     }
 
     fun updateFromResolution(
+        candidateFingerprintSha256: String,
+        reviewReceiptSha256: String,
         expectedSignature: String,
         resolution: StageFBReadOnlyResolution.Resolution,
     ): UpdateResult {
@@ -150,7 +152,11 @@ internal class StageFBAttemptGuard(context: Context) {
         }
 
         loaded as LoadResult.Present
-        if (loaded.record.expectedSignature != expectedSignature) {
+        if (
+            loaded.record.candidateFingerprintSha256 != candidateFingerprintSha256 ||
+            loaded.record.reviewReceiptSha256 != reviewReceiptSha256 ||
+            loaded.record.expectedSignature != expectedSignature
+        ) {
             return UpdateResult.INVALID_TRANSITION
         }
 
@@ -186,8 +192,8 @@ internal class StageFBAttemptGuard(context: Context) {
         val persisted = load()
         return if (
             persisted is LoadResult.Present &&
-            persisted.record.candidateFingerprintSha256 == loaded.record.candidateFingerprintSha256 &&
-            persisted.record.reviewReceiptSha256 == loaded.record.reviewReceiptSha256 &&
+            persisted.record.candidateFingerprintSha256 == candidateFingerprintSha256 &&
+            persisted.record.reviewReceiptSha256 == reviewReceiptSha256 &&
             persisted.record.expectedSignature == expectedSignature &&
             persisted.record.publicStatus == nextStatus
         ) {
