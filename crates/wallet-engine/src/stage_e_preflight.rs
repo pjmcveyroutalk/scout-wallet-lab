@@ -1,5 +1,5 @@
 use super::devnet_signing_coordinator::{
-    DevnetSigningCoordinator, DevnetSigningCoordinatorError, SignedDevnetTransactionMetadata,
+    DevnetSigningCoordinator, DevnetSigningCoordinatorError,
 };
 use crate::{
     CanonicalTransactionMessage, Cluster, DevnetRpc, ExecutionPolicy, PreparedTransaction, RpcError,
@@ -299,7 +299,7 @@ pub async fn run_fixed_devnet_simulation(
         lease.observed_block_height(),
     )?;
     let wire_transaction = encode_single_signature_transaction(
-        signed,
+        signed.signature().to_bytes(),
         transaction.message().bytes(),
     );
     let (simulation_slot, units_consumed) =
@@ -351,10 +351,9 @@ fn validate_single_signer_message(
 }
 
 fn encode_single_signature_transaction(
-    signed: SignedDevnetTransactionMetadata,
+    signature: [u8; 64],
     message_bytes: &[u8],
 ) -> Vec<u8> {
-    let signature = signed.signature().to_bytes();
     let mut transaction = Vec::with_capacity(1 + signature.len() + message_bytes.len());
     transaction.push(1_u8);
     transaction.extend_from_slice(&signature);
@@ -398,12 +397,9 @@ mod tests {
     use super::{
         encode_single_signature_transaction, parse_fee_response, parse_simulation_response,
         stage_e_preflight_instruction, validate_fee, GetFeeForMessageResponse,
-        SignedDevnetTransactionMetadata, SimulateTransactionResponse, StageEPreflightError,
-        STAGE_E_MAX_FEE_LAMPORTS, STAGE_E_PREFLIGHT_PAYLOAD, STAGE_E_PREFLIGHT_PROGRAM_ID,
+        SimulateTransactionResponse, StageEPreflightError, STAGE_E_MAX_FEE_LAMPORTS,
+        STAGE_E_PREFLIGHT_PAYLOAD, STAGE_E_PREFLIGHT_PROGRAM_ID,
     };
-    use crate::SignatureBytes;
-    use solana_hash::Hash;
-    use solana_pubkey::Pubkey;
 
     #[test]
     fn stage_e_instruction_is_fixed_and_has_no_accounts() -> Result<(), StageEPreflightError> {
@@ -430,18 +426,12 @@ mod tests {
 
     #[test]
     fn wire_encoding_is_one_signature_followed_by_message() {
-        let signature_bytes = [0x5a_u8; 64];
-        let signed = SignedDevnetTransactionMetadata {
-            public_key: Pubkey::new_from_array([0x11_u8; 32]),
-            signature: SignatureBytes::from_bytes_for_test(signature_bytes),
-            recent_blockhash: Hash::new_from_array([0x22_u8; 32]),
-            reserved_lamports: 5_000,
-        };
+        let signature = [0x5a_u8; 64];
         let message = [0x31_u8, 0x32_u8, 0x33_u8];
-        let encoded = encode_single_signature_transaction(signed, &message);
+        let encoded = encode_single_signature_transaction(signature, &message);
 
         assert_eq!(encoded[0], 1_u8);
-        assert_eq!(&encoded[1..65], &signature_bytes);
+        assert_eq!(&encoded[1..65], &signature);
         assert_eq!(&encoded[65..], &message);
     }
 
