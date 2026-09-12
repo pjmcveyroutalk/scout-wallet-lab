@@ -65,6 +65,12 @@ grep -F 'CandidateAlreadyPrepared' "${CORE_PATH}" >/dev/null || \
 grep -F 'CandidateTokenMismatch' "${CORE_PATH}" >/dev/null || \
   fail "candidate token binding is missing"
 
+grep -F 'CandidateLifecycleInvalid' "${CORE_PATH}" >/dev/null || \
+  fail "signed candidate lifecycle guard is missing"
+
+grep -F 'lifecycle_state: transaction.ledger().state()' "${CORE_PATH}" >/dev/null || \
+  fail "signed transaction lifecycle state is not preserved with the candidate"
+
 grep -F 'prepareStageFDevnetCandidate' "${BRIDGE_PATH}" >/dev/null || \
   fail "narrow Android Stage F-A prepare request is missing"
 
