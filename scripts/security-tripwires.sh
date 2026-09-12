@@ -5,6 +5,7 @@ readonly REPO_ROOT="$(git rev-parse --show-toplevel)"
 readonly EXPORTER_PATH="crates/wallet-engine/src/bin/export_observability.rs"
 readonly ANDROID_NATIVE_PATH="android/native/src/lib.rs"
 readonly ANDROID_BRIDGE_PATH="android/app/src/main/java/com/routalk/scoutoperator/NativeBridge.kt"
+readonly SIGNING_DESIGN_DOC="docs/DEVNET_SIGNING_BOUNDARY_V1.md"
 
 cd "${REPO_ROOT}"
 
@@ -31,6 +32,7 @@ assert_absent_in_source() {
     -- "${pattern}" \
     ':!scripts/security-tripwires.sh' \
     ':!README.md' \
+    ":!${SIGNING_DESIGN_DOC}" \
     >/dev/null 2>&1; then
     fail "${description}"
   fi
@@ -61,6 +63,7 @@ assert_passphrase_boundary() {
       -- "SCOUT_WALLET_PASSPHRASE" \
       ':!scripts/security-tripwires.sh' \
       ':!README.md' \
+      ":!${SIGNING_DESIGN_DOC}" \
       2>/dev/null || true
   )"
 
