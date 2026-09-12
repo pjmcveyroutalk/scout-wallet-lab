@@ -31,6 +31,12 @@ internal object StageFBPublicBindingCheck {
         if (receipt.reviewReceiptSha256 != claimedReviewReceiptSha256) {
             return Result.Invalid
         }
+        if (guardRecord.candidateFingerprintSha256 != receipt.candidateFingerprintSha256) {
+            return Result.Invalid
+        }
+        if (guardRecord.reviewReceiptSha256 != receipt.reviewReceiptSha256) {
+            return Result.Invalid
+        }
 
         if (!guardRecord.attemptStarted) {
             return Result.Invalid
