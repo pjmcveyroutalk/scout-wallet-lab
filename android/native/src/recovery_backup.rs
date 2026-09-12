@@ -1,3 +1,5 @@
+mod recovery_words_jni;
+
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use wallet_engine::{Cluster, LockedVault};

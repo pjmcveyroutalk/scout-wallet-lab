@@ -174,6 +174,18 @@ class CredentialRecoveryActivity : Activity() {
         fullWidth(verify)
         root.addView(verify)
 
+        val recoveryWords =
+            Button(this).apply {
+                text = "BACK UP RECOVERY WORDS"
+                isEnabled =
+                    !lockedVaultJson.isNullOrBlank() &&
+                        !expectedAddress.isNullOrBlank()
+                contentDescription = "Open the Scout emergency recovery words backup screen"
+            }
+
+        fullWidth(recoveryWords)
+        root.addView(recoveryWords)
+
         val returnToScout =
             Button(this).apply {
                 text = "RETURN TO SCOUT"
@@ -244,6 +256,11 @@ class CredentialRecoveryActivity : Activity() {
                     }.start()
                 }
             }
+        }
+
+        recoveryWords.setOnClickListener {
+            clearSensitiveField()
+            startActivity(Intent(this, RecoveryWordsActivity::class.java))
         }
 
         returnToScout.setOnClickListener {
