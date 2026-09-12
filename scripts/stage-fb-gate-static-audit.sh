@@ -2,6 +2,7 @@
 set -euo pipefail
 
 readonly ACTIVITY_PATH="android/app/src/main/java/com/routalk/scoutoperator/StageFBGateActivity.kt"
+readonly STATUS_CLIENT_PATH="android/app/src/main/java/com/routalk/scoutoperator/StageFBReadOnlyStatusClient.kt"
 readonly GUARD_PATH="android/app/src/main/java/com/routalk/scoutoperator/StageFBAttemptGuard.kt"
 readonly HUB_PATH="android/app/src/main/java/com/routalk/scoutoperator/OperatorHubActivity.kt"
 readonly MANIFEST_PATH="android/app/src/main/AndroidManifest.xml"
@@ -13,7 +14,12 @@ fail() {
   exit 1
 }
 
-for path in "${ACTIVITY_PATH}" "${GUARD_PATH}" "${HUB_PATH}" "${MANIFEST_PATH}"; do
+for path in \
+  "${ACTIVITY_PATH}" \
+  "${STATUS_CLIENT_PATH}" \
+  "${GUARD_PATH}" \
+  "${HUB_PATH}" \
+  "${MANIFEST_PATH}"; do
   [[ -f "${path}" ]] || fail "required Stage F-B gate file is missing: ${path}"
 done
 
@@ -32,8 +38,20 @@ grep -F 'ARBITRARY SIGNING — DISABLED' "${ACTIVITY_PATH}" >/dev/null || \
 grep -F 'IMPLEMENTATION GATE — NOT ARMED' "${ACTIVITY_PATH}" >/dev/null || \
   fail "Stage F-B not-armed status is missing"
 
+grep -F 'REFRESH READ-ONLY RESOLUTION' "${ACTIVITY_PATH}" >/dev/null || \
+  fail "Stage F-B manual read-only resolution control is missing"
+
+grep -F 'NativeBridge.devnetBlockHeight()' "${ACTIVITY_PATH}" >/dev/null || \
+  fail "Stage F-B read-only block-height observation is missing"
+
+grep -F 'StageFBReadOnlyStatusClient.fetch(' "${ACTIVITY_PATH}" >/dev/null || \
+  fail "Stage F-B read-only signature-status observation is missing"
+
+grep -F 'guard.updateFromResolution(' "${ACTIVITY_PATH}" >/dev/null || \
+  fail "Stage F-B public resolution persistence path is missing"
+
 grep -F 'StageFBAttemptGuard(this).load()' "${ACTIVITY_PATH}" >/dev/null || \
-  fail "Stage F-B gate must expose only the persisted one-attempt guard read-only state"
+  fail "Stage F-B gate must expose the persisted one-attempt guard state"
 
 grep -F 'ONE-ATTEMPT GUARD — CLEAR' "${ACTIVITY_PATH}" >/dev/null || \
   fail "Stage F-B gate clear guard state is missing"
@@ -48,16 +66,28 @@ grep -F 'Candidate fingerprint SHA-256: ' "${ACTIVITY_PATH}" >/dev/null || \
   fail "Stage F-B gate must expose the persisted public candidate fingerprint"
 
 grep -F 'loaded.record.candidateFingerprintSha256' "${ACTIVITY_PATH}" >/dev/null || \
-  fail "Stage F-B gate must read the persisted candidate fingerprint without mutation"
+  fail "Stage F-B gate must bind resolution to the persisted candidate fingerprint"
 
 grep -F 'Review receipt SHA-256: ' "${ACTIVITY_PATH}" >/dev/null || \
   fail "Stage F-B gate must expose the persisted public review receipt"
 
 grep -F 'loaded.record.reviewReceiptSha256' "${ACTIVITY_PATH}" >/dev/null || \
-  fail "Stage F-B gate must read the persisted review receipt without mutation"
+  fail "Stage F-B gate must bind resolution to the persisted review receipt"
 
 grep -F 'BINDING OBSERVATION ONLY — EXECUTION NOT AUTHORIZED' "${ACTIVITY_PATH}" >/dev/null || \
   fail "Stage F-B gate must state that binding observation does not authorize execution"
+
+grep -F 'getSignatureStatuses' "${STATUS_CLIENT_PATH}" >/dev/null || \
+  fail "Stage F-B read-only signature status RPC is missing"
+
+grep -F 'NativeBridge.rpcEndpoint()' "${STATUS_CLIENT_PATH}" >/dev/null || \
+  fail "Stage F-B status client must derive its endpoint from the native Devnet boundary"
+
+grep -F 'https://api.devnet.solana.com' "${STATUS_CLIENT_PATH}" >/dev/null || \
+  fail "Stage F-B status client must pin the expected Devnet endpoint"
+
+grep -F 'searchTransactionHistory' "${STATUS_CLIENT_PATH}" >/dev/null || \
+  fail "Stage F-B status client must support read-only historical resolution"
 
 grep -F 'StageFBGateActivity::class.java' "${HUB_PATH}" >/dev/null || \
   fail "Stage F-B operator hub entry is missing"
@@ -67,22 +97,30 @@ if ! grep -A2 'android:name=".StageFBGateActivity"' "${MANIFEST_PATH}" | \
   fail "Stage F-B gate activity must remain non-exported"
 fi
 
-for pattern in \
-  "${SUBMISSION_METHOD}" \
-  "${MAINNET_RPC}" \
-  "NativeBridge." \
-  "ClipboardManager" \
-  "signTransaction" \
-  "signMessage" \
-  "signBytes" \
-  "createLockedDevnetVault" \
-  "rekeyLockedDevnetVault" \
-  "exportLockedVaultRecoveryWords" \
-  "beginAttempt(" \
-  "updateFromResolution("; do
-  if grep -F "${pattern}" "${ACTIVITY_PATH}" >/dev/null; then
-    fail "Stage F-B guarded screen contains forbidden capability or guard mutation: ${pattern}"
-  fi
+for path in "${ACTIVITY_PATH}" "${STATUS_CLIENT_PATH}"; do
+  for pattern in \
+    "${SUBMISSION_METHOD}" \
+    "${MAINNET_RPC}" \
+    "ClipboardManager" \
+    "signTransaction" \
+    "signMessage" \
+    "signBytes" \
+    "createLockedDevnetVault" \
+    "rekeyLockedDevnetVault" \
+    "exportLockedVaultRecoveryWords" \
+    "beginAttempt("; do
+    if grep -F "${pattern}" "${path}" >/dev/null; then
+      fail "Stage F-B read-only runtime contains forbidden capability: ${pattern} in ${path}"
+    fi
+  done
 done
 
-echo "Stage F-B guarded operator gate audit passed"
+if grep -F 'NativeBridge.' "${ACTIVITY_PATH}" | grep -v -F 'NativeBridge.devnetBlockHeight()' >/dev/null; then
+  fail "Stage F-B gate may call only the native read-only block-height capability"
+fi
+
+if grep -F 'NativeBridge.' "${STATUS_CLIENT_PATH}" | grep -v -F 'NativeBridge.rpcEndpoint()' >/dev/null; then
+  fail "Stage F-B status client may call only the native read-only endpoint accessor"
+fi
+
+echo "Stage F-B guarded read-only resolution audit passed"
