@@ -1,11 +1,16 @@
 use crate::{
-    ExecutionPolicy, LedgerError, LockedVault, PolicyError, PreparedTransaction, SecretPassphrase,
-    SignatureBytes, SignerError, TransactionState, UnlockedWallet, VaultError,
+    BlockhashLease, ExecutionPolicy, LedgerError, LockedVault, PolicyError, PreparedTransaction,
+    SecretPassphrase, SignatureBytes, SignerError, TransactionState, UnlockedWallet, VaultError,
 };
 use solana_hash::Hash;
+use solana_instruction::Instruction;
 use solana_message::Message;
 use solana_pubkey::Pubkey;
-use std::fmt;
+use std::{fmt, str::FromStr};
+
+const STAGE_C_PROOF_PROGRAM_ID: &str = "MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr";
+const STAGE_C_PROOF_PAYLOAD: &[u8] = b"scout-stage-c-devnet-signing-proof-v1";
+const STAGE_C_PROOF_RESERVED_LAMPORTS: u64 = 1;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DevnetSigningCoordinatorError {
@@ -127,6 +132,25 @@ impl DevnetSigningCoordinator {
         self.wallet.emergency_lock();
     }
 
+    pub fn sign_stage_c_proof(
+        &self,
+        lease: BlockhashLease,
+    ) -> Result<SignedDevnetTransactionMetadata, DevnetSigningCoordinatorError> {
+        let current_block_height = lease.observed_block_height();
+        let instruction = stage_c_proof_instruction()?;
+        let program_id = instruction.program_id;
+        let policy = ExecutionPolicy::new(STAGE_C_PROOF_RESERVED_LAMPORTS, &[program_id])?;
+        let mut transaction = PreparedTransaction::reserve(
+            &[instruction],
+            self.public_key,
+            STAGE_C_PROOF_RESERVED_LAMPORTS,
+            lease,
+        )
+        .map_err(|_| DevnetSigningCoordinatorError::InvalidCanonicalMessage)?;
+
+        self.sign_prepared_transaction(&mut transaction, &policy, current_block_height)
+    }
+
     pub fn sign_prepared_transaction(
         &self,
         transaction: &mut PreparedTransaction,
@@ -171,17 +195,33 @@ impl DevnetSigningCoordinator {
     }
 }
 
+fn stage_c_proof_instruction() -> Result<Instruction, DevnetSigningCoordinatorError> {
+    let program_id = Pubkey::from_str(STAGE_C_PROOF_PROGRAM_ID)
+        .map_err(|_| DevnetSigningCoordinatorError::InvalidCanonicalMessage)?;
+
+    Ok(Instruction {
+        program_id,
+        accounts: Vec::new(),
+        data: STAGE_C_PROOF_PAYLOAD.to_vec(),
+    })
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{DevnetSigningCoordinator, DevnetSigningCoordinatorError};
+    use super::{
+        stage_c_proof_instruction, DevnetSigningCoordinator, DevnetSigningCoordinatorError,
+        STAGE_C_PROOF_PAYLOAD, STAGE_C_PROOF_PROGRAM_ID, STAGE_C_PROOF_RESERVED_LAMPORTS,
+    };
     use crate::{
-        BlockhashLease, ExecutionPolicy, LockedVault, PolicyError, PreparedTransaction,
-        SecretPassphrase, SecretSeed, SignerError, TransactionState, VaultError,
+        BlockhashLease, CanonicalTransactionMessage, ExecutionPolicy, LockedVault, PolicyError,
+        PreparedTransaction, SecretPassphrase, SecretSeed, SignerError, TransactionState,
+        VaultError,
     };
     use ed25519_dalek::{Signature, Verifier as _, VerifyingKey};
     use solana_hash::Hash;
     use solana_instruction::Instruction;
     use solana_pubkey::Pubkey;
+    use std::str::FromStr;
 
     fn prepared_transaction(
         payer: Pubkey,
@@ -250,6 +290,58 @@ mod tests {
             ))
         ));
 
+        Ok(())
+    }
+
+    #[test]
+    fn stage_c_proof_request_is_fixed_and_signature_verifies(
+    ) -> Result<(), DevnetSigningCoordinatorError> {
+        let (coordinator, payer) = coordinator_fixture(0x49)?;
+        let blockhash = Hash::new_from_array([0x72_u8; 32]);
+        let lease = BlockhashLease::new_for_test(blockhash, 700, 699);
+
+        let signed = coordinator.sign_stage_c_proof(lease)?;
+        let instruction = stage_c_proof_instruction()?;
+        let canonical =
+            CanonicalTransactionMessage::new(std::slice::from_ref(&instruction), payer, blockhash)
+                .map_err(|_| DevnetSigningCoordinatorError::InvalidCanonicalMessage)?;
+
+        assert_eq!(instruction.program_id.to_string(), STAGE_C_PROOF_PROGRAM_ID);
+        assert_eq!(instruction.data, STAGE_C_PROOF_PAYLOAD);
+        assert!(instruction.accounts.is_empty());
+        assert_eq!(signed.public_key(), payer);
+        assert_eq!(signed.recent_blockhash(), blockhash);
+        assert_eq!(signed.reserved_lamports(), STAGE_C_PROOF_RESERVED_LAMPORTS);
+
+        let verifying_key = VerifyingKey::from_bytes(&payer.to_bytes())
+            .map_err(|_| DevnetSigningCoordinatorError::InvalidCanonicalMessage)?;
+        let signature = Signature::from_bytes(&signed.signature().to_bytes());
+        assert!(verifying_key.verify(canonical.bytes(), &signature).is_ok());
+
+        Ok(())
+    }
+
+    #[test]
+    fn stage_c_proof_rejects_expired_blockhash() -> Result<(), DevnetSigningCoordinatorError> {
+        let (coordinator, _) = coordinator_fixture(0x50)?;
+        let lease = BlockhashLease::new_for_test(Hash::new_from_array([0x73_u8; 32]), 800, 801);
+
+        assert!(matches!(
+            coordinator.sign_stage_c_proof(lease),
+            Err(DevnetSigningCoordinatorError::Policy(
+                PolicyError::BlockhashExpired
+            ))
+        ));
+        Ok(())
+    }
+
+    #[test]
+    fn stage_c_proof_program_id_is_canonical() -> Result<(), DevnetSigningCoordinatorError> {
+        let expected = Pubkey::from_str(STAGE_C_PROOF_PROGRAM_ID)
+            .map_err(|_| DevnetSigningCoordinatorError::InvalidCanonicalMessage)?;
+        let instruction = stage_c_proof_instruction()?;
+
+        assert_eq!(instruction.program_id, expected);
         Ok(())
     }
 
