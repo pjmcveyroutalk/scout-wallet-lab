@@ -4,11 +4,11 @@ import android.app.Activity
 import android.app.AlertDialog
 import android.app.Application
 import android.content.Intent
-import android.net.Uri
 import android.os.Bundle
 import android.view.Gravity
 import android.widget.Button
 import android.widget.FrameLayout
+import android.widget.Toast
 
 internal class ScoutOperatorApplication : Application() {
     override fun onCreate() {
@@ -257,7 +257,6 @@ internal class ScoutOperatorApplication : Application() {
                         showUpdateDialog(
                             activity = activity,
                             result = result,
-                            downloadUrl = downloadUrl,
                         )
                     }
 
@@ -299,7 +298,6 @@ internal class ScoutOperatorApplication : Application() {
     private fun showUpdateDialog(
         activity: Activity,
         result: ScoutUpdateChecker.UpdateResult,
-        downloadUrl: String,
     ) {
         val latestVersion =
             result.latestVersionName
@@ -329,6 +327,12 @@ internal class ScoutOperatorApplication : Application() {
                     append(releaseIdentity)
                     append("\n\n")
                     append(
+                        "Scout will download the APK, verify its " +
+                            "published SHA-256 digest, and hand the " +
+                            "verified file directly to Android's installer.",
+                    )
+                    append("\n\n")
+                    append(
                         "Updating does not modify or replace " +
                             "your stored encrypted wallet vault.",
                     )
@@ -341,12 +345,39 @@ internal class ScoutOperatorApplication : Application() {
             .setPositiveButton("UPDATE NOW") { dialog, _ ->
                 dialog.dismiss()
 
-                openUpdate(
+                beginUpdate(
                     activity = activity,
-                    downloadUrl = downloadUrl,
+                    result = result,
                 )
             }
             .show()
+    }
+
+    private fun beginUpdate(
+        activity: Activity,
+        result: ScoutUpdateChecker.UpdateResult,
+    ) {
+        ScoutUpdateInstaller.begin(
+            activity = activity,
+            result = result,
+        ) { status ->
+            if (
+                status.startsWith("UPDATE FAILED") ||
+                status.startsWith("UPDATE BLOCKED")
+            ) {
+                showStatusDialog(
+                    activity = activity,
+                    title = "Scout update",
+                    message = status,
+                )
+            } else {
+                Toast.makeText(
+                    activity,
+                    status,
+                    Toast.LENGTH_LONG,
+                ).show()
+            }
+        }
     }
 
     private fun showStatusDialog(
@@ -364,40 +395,7 @@ internal class ScoutOperatorApplication : Application() {
             .show()
     }
 
-    private fun openUpdate(
-        activity: Activity,
-        downloadUrl: String,
-    ) {
-        if (!isApprovedDownloadUrl(downloadUrl)) {
-            return
-        }
-
-        val intent =
-            Intent(
-                Intent.ACTION_VIEW,
-                Uri.parse(downloadUrl),
-            ).apply {
-                addCategory(Intent.CATEGORY_BROWSABLE)
-            }
-
-        try {
-            activity.startActivity(intent)
-        } catch (_: Throwable) {
-            Unit
-        }
-    }
-
-    private fun isApprovedDownloadUrl(
-        value: String,
-    ): Boolean =
-        value.startsWith(
-            APPROVED_DOWNLOAD_PREFIX,
-        )
-
     private companion object {
-        const val APPROVED_DOWNLOAD_PREFIX =
-            "https://github.com/pjmcveyroutalk/scout-wallet-lab/"
-
         const val UPDATE_BUTTON_TAG =
             "scout-manual-update-control"
 
