@@ -7,9 +7,11 @@ on:
       - "android/app/src/main/java/com/routalk/scoutoperator/StageFBReadOnlyResolution.kt"
       - "android/app/src/main/java/com/routalk/scoutoperator/StageFBAttemptGuard.kt"
       - "android/app/src/main/java/com/routalk/scoutoperator/StageFBCandidateFingerprint.kt"
+      - "android/app/src/main/java/com/routalk/scoutoperator/StageFBCandidateReviewReceipt.kt"
       - "scripts/stage-fb-readiness-static-audit.sh"
       - "scripts/stage-fb-attempt-guard-static-audit.sh"
       - "scripts/stage-fb-candidate-fingerprint-static-audit.sh"
+      - "scripts/stage-fb-candidate-review-receipt-static-audit.sh"
       - ".github/workflows/stage-fb-readiness-audit.yml"
   push:
     branches:
@@ -19,9 +21,11 @@ on:
       - "android/app/src/main/java/com/routalk/scoutoperator/StageFBReadOnlyResolution.kt"
       - "android/app/src/main/java/com/routalk/scoutoperator/StageFBAttemptGuard.kt"
       - "android/app/src/main/java/com/routalk/scoutoperator/StageFBCandidateFingerprint.kt"
+      - "android/app/src/main/java/com/routalk/scoutoperator/StageFBCandidateReviewReceipt.kt"
       - "scripts/stage-fb-readiness-static-audit.sh"
       - "scripts/stage-fb-attempt-guard-static-audit.sh"
       - "scripts/stage-fb-candidate-fingerprint-static-audit.sh"
+      - "scripts/stage-fb-candidate-review-receipt-static-audit.sh"
       - ".github/workflows/stage-fb-readiness-audit.yml"
 
 permissions:
@@ -42,3 +46,6 @@ jobs:
 
       - name: Run Stage F-B candidate fingerprint audit
         run: bash scripts/stage-fb-candidate-fingerprint-static-audit.sh
+
+      - name: Run Stage F-B candidate review receipt audit
+        run: bash scripts/stage-fb-candidate-review-receipt-static-audit.sh
