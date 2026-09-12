@@ -78,7 +78,7 @@ pub(crate) fn recovery_words_from_signing_seed(
         return Err(RecoveryWordsError::RoundTripMismatch);
     }
 
-    verify_seed_public_key(recovered_seed.as_ref(), expected_public_key)?;
+    verify_seed_public_key(&recovered_seed, expected_public_key)?;
 
     Ok(RecoveryWords {
         words,
@@ -116,21 +116,17 @@ pub(crate) fn signing_seed_from_recovery_words(
     Ok(signing_seed)
 }
 
+#[cfg(test)]
 pub(crate) fn verify_recovery_words_identity(
     words: &str,
     expected_public_key: Pubkey,
 ) -> Result<(), RecoveryWordsError> {
     let signing_seed = signing_seed_from_recovery_words(words)?;
-    verify_seed_public_key(signing_seed.as_ref(), expected_public_key)
+    verify_seed_public_key(&signing_seed, expected_public_key)
 }
 
 fn normalize_recovery_words(words: &str) -> Zeroizing<String> {
-    Zeroizing::new(
-        words
-            .split_whitespace()
-            .collect::<Vec<&str>>()
-            .join(" "),
-    )
+    Zeroizing::new(words.split_whitespace().collect::<Vec<&str>>().join(" "))
 }
 
 fn verify_seed_public_key(
@@ -189,9 +185,9 @@ mod tests {
     #[test]
     fn recovery_words_round_trip_exact_signing_seed() -> Result<(), RecoveryWordsError> {
         let seed = [
-            0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c,
-            0x0d, 0x0e, 0x0f, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19,
-            0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f,
+            0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d,
+            0x0e, 0x0f, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b,
+            0x1c, 0x1d, 0x1e, 0x1f,
         ];
         let public_key = public_key_for_seed(&seed);
 
@@ -265,8 +261,7 @@ mod tests {
 
     #[test]
     fn unknown_word_is_rejected() {
-        let unknown_word =
-            ZERO_ENTROPY_24_WORD_VECTOR.replacen("art", "notaword", 1);
+        let unknown_word = ZERO_ENTROPY_24_WORD_VECTOR.replacen("art", "notaword", 1);
 
         assert!(matches!(
             signing_seed_from_recovery_words(unknown_word.as_str()),
@@ -276,8 +271,7 @@ mod tests {
 
     #[test]
     fn checksum_corruption_is_rejected() {
-        let corrupted_checksum =
-            ZERO_ENTROPY_24_WORD_VECTOR.replacen("art", "abandon", 1);
+        let corrupted_checksum = ZERO_ENTROPY_24_WORD_VECTOR.replacen("art", "abandon", 1);
 
         assert!(matches!(
             signing_seed_from_recovery_words(corrupted_checksum.as_str()),
@@ -298,9 +292,7 @@ mod tests {
     }
 
     #[test]
-    fn words_for_one_seed_cannot_verify_as_another_wallet()
-        -> Result<(), RecoveryWordsError>
-    {
+    fn words_for_one_seed_cannot_verify_as_another_wallet() -> Result<(), RecoveryWordsError> {
         let seed = [0x11_u8; RECOVERY_ENTROPY_LEN];
         let other_seed = [0x22_u8; RECOVERY_ENTROPY_LEN];
 
@@ -310,10 +302,7 @@ mod tests {
         let recovery_words = recovery_words_from_signing_seed(&seed, public_key)?;
 
         assert!(matches!(
-            verify_recovery_words_identity(
-                recovery_words.words(),
-                other_public_key
-            ),
+            verify_recovery_words_identity(recovery_words.words(), other_public_key),
             Err(RecoveryWordsError::PublicKeyMismatch)
         ));
 
