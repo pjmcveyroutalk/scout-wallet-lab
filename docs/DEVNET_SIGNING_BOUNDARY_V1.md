@@ -1,20 +1,22 @@
 # Scout Wallet Lab — Devnet Signing Boundary v1
 
-Status: Stage D physical signing proof passed; Stage E physical simulation-only preflight passed; Stage F submission remains design-only and not authorized
+Status: Stage D physical signing proof passed; Stage E physical simulation-only preflight passed; Stage F design merged; Stage F-A presubmit implementation is in review; ledger submission remains disabled and physically unauthorized
 
 This document defines the Scout Wallet Lab signing and pre-submission boundary without opening Mainnet, remote signing, browser signing, arbitrary signing, or production-funds movement.
 
 ## Locked boundary
 
 - Wallet Lab remains Devnet-only.
-- `sendTransaction` remains forbidden in executable source until PJ explicitly opens the separate Stage F implementation gate.
+- Stage F implementation work was explicitly opened by PJ on 2026-09-12, but Stage F-A remains presubmit-only and contains no ledger-submission RPC.
+- `sendTransaction` remains forbidden in executable source during Stage F-A.
+- Stage F-B ledger submission remains a later, separate implementation and physical-authorization gate.
 - Mainnet RPC remains forbidden.
 - Raw seed/private-key/keypair export remains forbidden.
 - Browser/Vercel remains outside the signing trust boundary.
 - Arbitrary-message, arbitrary-byte, and generic transaction-signing APIs remain forbidden.
 - Passphrases are accepted only for explicit local vault operations and must not be stored as plaintext.
-- Recovery, re-key, signing, simulation, and submission remain separate operator gates.
-- A successful simulation never authorizes submission by itself.
+- Recovery, re-key, signing, simulation, presubmit preparation, and ledger submission remain separate operator gates.
+- A successful signature, simulation, or presubmit proof never authorizes ledger submission by itself.
 
 ## Existing trusted primitives
 
@@ -31,9 +33,10 @@ The Rust wallet engine contains the internal pieces required for a controlled si
 - emergency signer lock;
 - transaction-state rules that prevent unsafe retry/re-sign behavior;
 - Rust-only `DevnetSigningCoordinator` composing those gates;
-- fixed Stage E fee preflight and signature-verifying Devnet simulation.
+- fixed Stage E fee preflight and signature-verifying Devnet simulation;
+- Stage F-A fixed-candidate fee, balance-floor, simulation, and in-memory candidate controls.
 
-These primitives do not authorize arbitrary signing or transaction submission.
+These primitives do not authorize arbitrary signing or ledger submission.
 
 ## v1 trust boundary
 
@@ -54,15 +57,15 @@ A Devnet signing request must pass all gates below before the native signer may 
 
 No API may accept arbitrary bytes for signing.
 
-## Separation of signing, simulation, and submission
+## Separation of signing, simulation, presubmit preparation, and submission
 
-Signing, simulation, and transaction submission are separate milestones.
+Signing, simulation, presubmit preparation, and ledger submission are separate milestones.
 
-Devnet Signing Boundary v1 may produce a signature for a policy-authorized canonical transaction message. Stage E may also send that exact signed transaction to Devnet `simulateTransaction` with signature verification enabled.
+Devnet Signing Boundary v1 may produce a signature for a policy-authorized canonical transaction message. Stage E may send that exact signed transaction to Devnet `simulateTransaction` with signature verification enabled. Stage F-A may prepare one fixed signed candidate, run the same exact-bytes simulation discipline, and retain that candidate only in process memory behind a random one-time token until it is explicitly discarded or the process ends.
 
-Neither action authorizes broadcasting the transaction for inclusion in the ledger.
+None of those actions authorizes broadcasting the transaction for inclusion in the ledger.
 
-`sendTransaction` remains a security-tripwire failure in executable source until a separate Devnet submission gate is explicitly designed, reviewed, approved, implemented, and physically authorized.
+Stage F-A must not contain `sendTransaction`. Any future Stage F-B broadcast path requires a separate implementation gate and a separate physical operator authorization before the first Devnet ledger submission.
 
 ## Android/JNI staging sequence
 
@@ -159,44 +162,46 @@ Stage E remains a fixed, non-submitting proof path:
 
 A Stage E pass proves the fixed signed candidate can clear the local policy gates and Devnet simulation. It does not prove or authorize ledger submission.
 
-### Stage F — Devnet submission gate design
+### Stage F-A — Devnet presubmit proof
 
-Design phase may proceed. Implementation and physical submission are not authorized by this document.
+Implementation is in review. Physical Stage F-A execution has not yet occurred.
 
-The first possible Stage F transaction, if separately approved by PJ, must remain narrower than a general wallet send path. The implementation contract is:
+Stage F-A is intentionally narrower than a ledger-submission path:
 
-1. Devnet only; the RPC cluster and endpoint must be structurally verified before authorization.
-2. Exactly one fixed Memo program instruction with a fixed Stage F proof payload defined in source.
+1. Devnet only; Android verifies the native identity, cluster, and exact Devnet endpoint before enabling the gate.
+2. Exactly one fixed Memo program instruction with payload `scout-stage-f-devnet-submission-proof-v1`.
 3. No recipient account, token transfer, system transfer, swap, program-selected accounts, or operator-supplied transaction bytes.
-4. Exactly one required signer and the stored Scout wallet must be the payer.
-5. Fresh blockhash lease resolved immediately before fee calculation and authorization.
-6. Exact fee obtained from Devnet and bounded by a small fixed cap in source.
-7. Sufficient Devnet balance verified before signing, with a conservative remaining-balance floor.
-8. The exact candidate must pass signature-verifying simulation before any submission can become eligible.
-9. Simulation result must be clean and tied to the same signed bytes intended for submission.
-10. A second, separate local authorization acknowledgement must be required after simulation and before submission.
-11. Current wallet passphrase must be entered locally for the Stage F operation and wiped after use.
-12. The signed wire transaction must not cross into browser/Vercel code, logs, analytics, clipboard, files, intents, or persistent app storage.
-13. Submission must occur at most once for that signed candidate. No automatic retry, rebroadcast, replacement, or re-sign loop is allowed.
-14. Only the resulting public signature and public confirmation metadata may be displayed.
-15. Mainnet remains structurally unavailable.
-16. Generic signing, arbitrary transaction submission, token transfer, and account-selectable send surfaces remain forbidden.
-17. The global executable-source tripwire against `sendTransaction` must remain active until PJ explicitly authorizes Stage F implementation in a separate operator decision.
+4. Exactly one required signer and the stored Scout wallet as payer.
+5. A fresh blockhash lease is resolved before fee calculation and signing.
+6. `getFeeForMessage` obtains the exact fee, which must be greater than zero and no more than 10,000 lamports.
+7. Current Devnet balance is fetched and the candidate is rejected unless at least 1,000,000 lamports remain after the fee.
+8. The exact candidate is signed locally through the existing policy-authorized coordinator.
+9. The exact signed wire bytes are sent only to `simulateTransaction` with `sigVerify: true` and `replaceRecentBlockhash: false`.
+10. Simulation must complete without execution error and return units consumed.
+11. The signed wire candidate is held only in zeroizing process memory behind a random 16-byte one-time token.
+12. Only one prepared candidate may exist in the process at a time.
+13. Discard requires the exact candidate token; leaving or destroying the Stage F-A screen attempts discard.
+14. The token is not displayed to the operator and is not persisted, copied, shared, logged, placed in an intent, or sent to browser/Vercel code.
+15. The Stage F-A activity is non-exported and reachable only through explicit Scout operator navigation.
+16. Mainnet, generic signing, wallet creation/re-key/recovery export, and ledger submission remain unavailable from the Stage F-A surface.
+17. `sendTransaction` remains absent from Stage F-A executable source.
 
-Before implementation is opened, Stage F must also define a fail-closed lifecycle for at least these outcomes:
+A physical Stage F-A pass will prove only that Scout can prepare, sign, simulate, hold, and discard the exact bounded candidate. It will not submit anything to the ledger.
 
-- preflight fee outside boundary;
-- insufficient Devnet balance;
-- stale blockhash;
-- simulation failure;
-- operator cancellation;
-- submission transport failure with ambiguous delivery;
-- RPC rejection;
-- returned signature mismatch or malformed response;
-- confirmation timeout;
-- confirmed success.
+### Stage F-B — first Devnet ledger-submission gate
 
-Ambiguous submission transport failure is terminal for the candidate: Scout must not automatically submit the same signed bytes again and must not automatically create a replacement transaction.
+Not implemented and not physically authorized.
+
+If separately opened after a successful Stage F-A physical proof, Stage F-B must preserve the exact signed candidate and fail closed across the complete delivery lifecycle. At minimum:
+
+- a separate local post-simulation authorization is required before the first delivery attempt;
+- the exact prepared candidate must be used without replacement or re-signing;
+- submission is attempted at most once for that candidate;
+- no automatic retry or rebroadcast occurs after an ambiguous transport outcome;
+- stale blockhash, RPC rejection, returned-signature mismatch, confirmation timeout, ambiguous delivery, and confirmed success remain distinct states;
+- ambiguous delivery is terminal for automatic action and requires observation/reconciliation rather than another send;
+- only public transaction signature and confirmation metadata may be displayed;
+- Mainnet remains structurally unavailable.
 
 ## Required tests and tripwires
 
@@ -208,7 +213,7 @@ CI must continue to prove:
 - security tripwires;
 - Android build and APK signature verification when Android code changes;
 - no Mainnet RPC endpoint;
-- no `sendTransaction` executable source path before explicit Stage F implementation authorization;
+- no Stage F-A `sendTransaction` executable path;
 - no generic Android/JNI transaction signing;
 - no arbitrary-message or arbitrary-byte signing;
 - Stage D calls only the fixed Stage C proof request;
@@ -216,6 +221,9 @@ CI must continue to prove:
 - Stage E calls only its fixed simulation request;
 - Stage E remains non-exported;
 - Stage E simulation uses signature verification and never substitutes a fresh blockhash server-side;
+- Stage F-A fixed payload, fee ceiling, balance floor, exact-bytes signature-verifying simulation, zeroizing in-memory candidate, one-time token binding, and discard path remain present;
+- Stage F-A has only narrow prepare/discard JNI requests;
+- Stage F-A remains non-exported;
 - the normal credential-recovery launcher remains intact for updater compatibility.
 
 No merge is allowed on a red or ambiguous run.
@@ -225,13 +233,14 @@ No merge is allowed on a red or ambiguous run.
 PJ remains the final authority at the following points:
 
 - merging signing-boundary PRs into `main`;
-- enabling any transaction submission capability;
+- physically executing the Stage F-A presubmit proof;
+- opening Stage F-B ledger-submission implementation;
 - physically authorizing the first Devnet ledger submission;
 - introducing Mainnet capability;
 - handling real funds.
 
-Stage D and Stage E physical passes do not transfer or weaken those authorities.
+Stage D and Stage E physical passes, Stage F implementation authorization, and any later Stage F-A pass do not transfer or weaken those authorities.
 
 ## Current next exact action
 
-Review and certify this Stage F design-only boundary update. It intentionally adds no submission code and leaves the executable-source `sendTransaction` tripwire intact. After a green design PR is merged, Stage F implementation must remain blocked until PJ separately and explicitly authorizes opening the Devnet submission capability.
+Complete and certify the Stage F-A presubmit harness under the dedicated Stage F boundary audit, Rust 1.80 CI, and Android CI. Keep the PR draft until all three lanes are green and the final diff contains no ledger-submission or Mainnet path. Then present the PR for PJ's manual merge. After merge and app update, the next operator action is the explicit physical Stage F-A presubmit proof followed by explicit candidate discard. Stage F-B remains closed until a later separate operator decision.
