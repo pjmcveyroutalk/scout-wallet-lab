@@ -19,6 +19,11 @@ internal object ScoutUpdateChecker {
                 """^scout-operator-v0\.2\.(\d+)-([0-9a-fA-F]{7})\.apk$""",
         )
 
+    private val sha256Pattern =
+        Regex(
+            pattern = "^[0-9a-f]{64}$",
+        )
+
     internal data class UpdateResult(
         val success: Boolean,
         val updateAvailable: Boolean,
@@ -29,6 +34,7 @@ internal object ScoutUpdateChecker {
         val latestShortSha: String?,
         val downloadUrl: String?,
         val assetName: String?,
+        val expectedSha256: String?,
         val status: String,
     )
 
@@ -111,6 +117,7 @@ internal object ScoutUpdateChecker {
                 latestShortSha = latest.shortSha,
                 downloadUrl = latest.downloadUrl,
                 assetName = latest.assetName,
+                expectedSha256 = latest.expectedSha256,
                 status =
                     if (updateAvailable) {
                         "UPDATE AVAILABLE — ${latest.versionName}"
@@ -199,6 +206,15 @@ internal object ScoutUpdateChecker {
                     }
                     ?: continue
 
+            val expectedSha256 =
+                asset.optString("digest")
+                    .lowercase()
+                    .removePrefix("sha256:")
+                    .takeIf { digest ->
+                        sha256Pattern.matches(digest)
+                    }
+                    ?: continue
+
             val candidate =
                 ReleaseApk(
                     versionCode = versionCode,
@@ -206,6 +222,7 @@ internal object ScoutUpdateChecker {
                     shortSha = shortSha,
                     downloadUrl = downloadUrl,
                     assetName = name,
+                    expectedSha256 = expectedSha256,
                 )
 
             val currentLatest =
@@ -269,6 +286,7 @@ internal object ScoutUpdateChecker {
             latestShortSha = null,
             downloadUrl = null,
             assetName = null,
+            expectedSha256 = null,
             status = status,
         )
 
@@ -283,5 +301,6 @@ internal object ScoutUpdateChecker {
         val shortSha: String,
         val downloadUrl: String,
         val assetName: String,
+        val expectedSha256: String,
     )
 }
