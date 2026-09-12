@@ -2,6 +2,7 @@
 set -euo pipefail
 
 readonly ACTIVITY_PATH="android/app/src/main/java/com/routalk/scoutoperator/StageFBGateActivity.kt"
+readonly GUARD_PATH="android/app/src/main/java/com/routalk/scoutoperator/StageFBAttemptGuard.kt"
 readonly HUB_PATH="android/app/src/main/java/com/routalk/scoutoperator/OperatorHubActivity.kt"
 readonly MANIFEST_PATH="android/app/src/main/AndroidManifest.xml"
 readonly MAINNET_RPC="https://api.""mainnet-beta.solana.com"
@@ -12,7 +13,7 @@ fail() {
   exit 1
 }
 
-for path in "${ACTIVITY_PATH}" "${HUB_PATH}" "${MANIFEST_PATH}"; do
+for path in "${ACTIVITY_PATH}" "${GUARD_PATH}" "${HUB_PATH}" "${MANIFEST_PATH}"; do
   [[ -f "${path}" ]] || fail "required Stage F-B gate file is missing: ${path}"
 done
 
@@ -30,6 +31,18 @@ grep -F 'ARBITRARY SIGNING — DISABLED' "${ACTIVITY_PATH}" >/dev/null || \
 
 grep -F 'IMPLEMENTATION GATE — NOT ARMED' "${ACTIVITY_PATH}" >/dev/null || \
   fail "Stage F-B not-armed status is missing"
+
+grep -F 'StageFBAttemptGuard(this).load()' "${ACTIVITY_PATH}" >/dev/null || \
+  fail "Stage F-B gate must expose only the persisted one-attempt guard read-only state"
+
+grep -F 'ONE-ATTEMPT GUARD — CLEAR' "${ACTIVITY_PATH}" >/dev/null || \
+  fail "Stage F-B gate clear guard state is missing"
+
+grep -F 'ONE-ATTEMPT GUARD — CORRUPT / FAIL CLOSED' "${ACTIVITY_PATH}" >/dev/null || \
+  fail "Stage F-B gate corrupt guard fail-closed state is missing"
+
+grep -F 'ONE-ATTEMPT GUARD — RECORD PRESENT' "${ACTIVITY_PATH}" >/dev/null || \
+  fail "Stage F-B gate recorded-attempt state is missing"
 
 grep -F 'StageFBGateActivity::class.java' "${HUB_PATH}" >/dev/null || \
   fail "Stage F-B operator hub entry is missing"
@@ -49,9 +62,11 @@ for pattern in \
   "signBytes" \
   "createLockedDevnetVault" \
   "rekeyLockedDevnetVault" \
-  "exportLockedVaultRecoveryWords"; do
+  "exportLockedVaultRecoveryWords" \
+  "beginAttempt(" \
+  "updateFromResolution("; do
   if grep -F "${pattern}" "${ACTIVITY_PATH}" >/dev/null; then
-    fail "Stage F-B guarded screen contains forbidden capability: ${pattern}"
+    fail "Stage F-B guarded screen contains forbidden capability or guard mutation: ${pattern}"
   fi
 done
 
