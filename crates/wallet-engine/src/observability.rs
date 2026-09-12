@@ -1,6 +1,3 @@
-#[path = "devnet_signing_coordinator.rs"]
-pub mod devnet_signing_coordinator;
-
 use crate::{DevnetAccount, SignerState, TransactionLedgerEntry, TransactionState, UnlockedWallet};
 use serde::Serialize;
 use solana_pubkey::Pubkey;
