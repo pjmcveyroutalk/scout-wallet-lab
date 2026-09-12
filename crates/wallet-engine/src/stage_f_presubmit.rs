@@ -1,7 +1,7 @@
 use super::devnet_signing_coordinator::{DevnetSigningCoordinator, DevnetSigningCoordinatorError};
 use crate::{
     CanonicalTransactionMessage, Cluster, DevnetRpc, ExecutionPolicy, PreparedTransaction,
-    RpcError, SignatureBytes,
+    RpcError, SignatureBytes, TransactionState,
 };
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
 use reqwest::Client;
@@ -43,6 +43,7 @@ pub enum StageFPreSubmitError {
     CandidateRegistryUnavailable,
     CandidateNotFound,
     CandidateTokenMismatch,
+    CandidateLifecycleInvalid,
 }
 
 impl fmt::Display for StageFPreSubmitError {
@@ -63,6 +64,7 @@ impl fmt::Display for StageFPreSubmitError {
             Self::CandidateRegistryUnavailable => "Stage F candidate registry is unavailable",
             Self::CandidateNotFound => "Stage F prepared candidate was not found",
             Self::CandidateTokenMismatch => "Stage F prepared candidate token did not match",
+            Self::CandidateLifecycleInvalid => "Stage F prepared candidate lifecycle is invalid",
         };
 
         formatter.write_str(message)
@@ -323,6 +325,7 @@ struct PreparedStageFCandidate {
     token: StageFCandidateToken,
     wire_transaction: Zeroizing<Vec<u8>>,
     last_valid_block_height: u64,
+    lifecycle_state: TransactionState,
 }
 
 #[derive(Default)]
@@ -340,6 +343,10 @@ impl CandidateStore {
             return Err(StageFPreSubmitError::InvalidCanonicalMessage);
         }
 
+        if candidate.lifecycle_state != TransactionState::Signed {
+            return Err(StageFPreSubmitError::CandidateLifecycleInvalid);
+        }
+
         self.candidate = Some(candidate);
         Ok(())
     }
@@ -352,6 +359,10 @@ impl CandidateStore {
 
         if candidate.token != token {
             return Err(StageFPreSubmitError::CandidateTokenMismatch);
+        }
+
+        if candidate.lifecycle_state != TransactionState::Signed {
+            return Err(StageFPreSubmitError::CandidateLifecycleInvalid);
         }
 
         self.candidate = None;
@@ -370,6 +381,10 @@ impl CandidateStore {
 
         if candidate.token != token {
             return Err(StageFPreSubmitError::CandidateTokenMismatch);
+        }
+
+        if candidate.lifecycle_state != TransactionState::Signed {
+            return Err(StageFPreSubmitError::CandidateLifecycleInvalid);
         }
 
         Ok(current_block_height > candidate.last_valid_block_height)
@@ -438,6 +453,7 @@ pub async fn prepare_fixed_devnet_candidate(
         token: candidate_token,
         wire_transaction,
         last_valid_block_height: lease.last_valid_block_height(),
+        lifecycle_state: transaction.ledger().state(),
     };
     store_candidate(candidate)?;
 
@@ -595,6 +611,7 @@ mod tests {
         StageFCandidateToken, StageFPreSubmitError, STAGE_F_MAX_FEE_LAMPORTS,
         STAGE_F_MIN_REMAINING_BALANCE_LAMPORTS, STAGE_F_PAYLOAD, STAGE_F_PROGRAM_ID,
     };
+    use crate::TransactionState;
     use zeroize::Zeroizing;
 
     #[test]
@@ -695,7 +712,7 @@ mod tests {
     }
 
     #[test]
-    fn candidate_store_is_single_slot_and_token_bound() -> Result<(), StageFPreSubmitError> {
+    fn candidate_store_is_single_slot_token_bound_and_signed() -> Result<(), StageFPreSubmitError> {
         let first_token = StageFCandidateToken::from_bytes([0x11_u8; 16]);
         let second_token = StageFCandidateToken::from_bytes([0x22_u8; 16]);
         let mut store = CandidateStore::default();
@@ -703,6 +720,7 @@ mod tests {
             token: first_token,
             wire_transaction: Zeroizing::new(vec![1_u8, 2_u8, 3_u8]),
             last_valid_block_height: 500,
+            lifecycle_state: TransactionState::Signed,
         };
 
         store.insert(candidate)?;
@@ -711,6 +729,7 @@ mod tests {
                 token: second_token,
                 wire_transaction: Zeroizing::new(vec![4_u8]),
                 last_valid_block_height: 600,
+                lifecycle_state: TransactionState::Signed,
             }),
             Err(StageFPreSubmitError::CandidateAlreadyPrepared)
         ));
@@ -727,5 +746,22 @@ mod tests {
         ));
 
         Ok(())
+    }
+
+    #[test]
+    fn candidate_store_rejects_non_signed_lifecycle_state() {
+        let token = StageFCandidateToken::from_bytes([0x33_u8; 16]);
+        let mut store = CandidateStore::default();
+        let candidate = PreparedStageFCandidate {
+            token,
+            wire_transaction: Zeroizing::new(vec![1_u8]),
+            last_valid_block_height: 700,
+            lifecycle_state: TransactionState::Reserved,
+        };
+
+        assert!(matches!(
+            store.insert(candidate),
+            Err(StageFPreSubmitError::CandidateLifecycleInvalid)
+        ));
     }
 }
