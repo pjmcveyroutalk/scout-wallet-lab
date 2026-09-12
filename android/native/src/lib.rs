@@ -4,6 +4,7 @@ mod account_history;
 mod credential_recovery;
 mod recovery_backup;
 mod stage_e_preflight;
+mod stage_f_presubmit;
 
 use account_history::fetch_locked_vault_devnet_history;
 use jni::{
