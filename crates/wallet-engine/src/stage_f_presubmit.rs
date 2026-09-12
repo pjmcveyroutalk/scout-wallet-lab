@@ -429,8 +429,9 @@ pub async fn prepare_fixed_devnet_candidate(
         signed.signature().to_bytes(),
         transaction.message().bytes(),
     ));
-    let (simulation_slot, units_consumed) =
-        rpc.simulate_signed_transaction(wire_transaction.as_slice()).await?;
+    let (simulation_slot, units_consumed) = rpc
+        .simulate_signed_transaction(wire_transaction.as_slice())
+        .await?;
 
     let candidate_token = generate_candidate_token()?;
     let candidate = PreparedStageFCandidate {
@@ -454,9 +455,7 @@ pub async fn prepare_fixed_devnet_candidate(
     })
 }
 
-pub fn discard_prepared_candidate(
-    token: StageFCandidateToken,
-) -> Result<(), StageFPreSubmitError> {
+pub fn discard_prepared_candidate(token: StageFCandidateToken) -> Result<(), StageFPreSubmitError> {
     let mut store = candidate_store()
         .lock()
         .map_err(|_| StageFPreSubmitError::CandidateRegistryUnavailable)?;
@@ -517,10 +516,7 @@ fn validate_fee(fee_lamports: u64) -> Result<(), StageFPreSubmitError> {
     Ok(())
 }
 
-fn validate_balance(
-    balance_lamports: u64,
-    fee_lamports: u64,
-) -> Result<u64, StageFPreSubmitError> {
+fn validate_balance(balance_lamports: u64, fee_lamports: u64) -> Result<u64, StageFPreSubmitError> {
     let remaining_balance_lamports = balance_lamports
         .checked_sub(fee_lamports)
         .ok_or(StageFPreSubmitError::InsufficientBalance)?;
@@ -595,10 +591,9 @@ mod tests {
         encode_single_signature_transaction, parse_fee_response, parse_simulation_response,
         stage_f_instruction, validate_balance, validate_fee, CandidateStore,
         GetFeeForMessageResponse, GetFeeForMessageResult, PreparedStageFCandidate,
-        SimulateTransactionResponse, SimulateTransactionResult, SimulationContext,
-        SimulationValue, StageFCandidateToken, StageFPreSubmitError,
-        STAGE_F_MAX_FEE_LAMPORTS, STAGE_F_MIN_REMAINING_BALANCE_LAMPORTS, STAGE_F_PAYLOAD,
-        STAGE_F_PROGRAM_ID,
+        SimulateTransactionResponse, SimulateTransactionResult, SimulationContext, SimulationValue,
+        StageFCandidateToken, StageFPreSubmitError, STAGE_F_MAX_FEE_LAMPORTS,
+        STAGE_F_MIN_REMAINING_BALANCE_LAMPORTS, STAGE_F_PAYLOAD, STAGE_F_PROGRAM_ID,
     };
     use zeroize::Zeroizing;
 
