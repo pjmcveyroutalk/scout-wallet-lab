@@ -4,6 +4,13 @@ on:
   pull_request:
     paths:
       - "crates/wallet-engine/src/stage_f_presubmit.rs"
+      - "crates/wallet-engine/src/recovery_words.rs"
+      - "android/native/src/lib.rs"
+      - "android/native/src/stage_f_presubmit.rs"
+      - "android/app/src/main/java/com/routalk/scoutoperator/NativeBridge.kt"
+      - "android/app/src/main/java/com/routalk/scoutoperator/StageFPresubmitActivity.kt"
+      - "android/app/src/main/java/com/routalk/scoutoperator/OperatorHubActivity.kt"
+      - "android/app/src/main/AndroidManifest.xml"
       - "scripts/stage-f-presubmit-static-audit.sh"
       - ".github/workflows/stage-f-presubmit-audit.yml"
   push:
@@ -11,6 +18,13 @@ on:
       - main
     paths:
       - "crates/wallet-engine/src/stage_f_presubmit.rs"
+      - "crates/wallet-engine/src/recovery_words.rs"
+      - "android/native/src/lib.rs"
+      - "android/native/src/stage_f_presubmit.rs"
+      - "android/app/src/main/java/com/routalk/scoutoperator/NativeBridge.kt"
+      - "android/app/src/main/java/com/routalk/scoutoperator/StageFPresubmitActivity.kt"
+      - "android/app/src/main/java/com/routalk/scoutoperator/OperatorHubActivity.kt"
+      - "android/app/src/main/AndroidManifest.xml"
       - "scripts/stage-f-presubmit-static-audit.sh"
       - ".github/workflows/stage-f-presubmit-audit.yml"
 
