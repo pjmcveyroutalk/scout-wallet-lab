@@ -11,26 +11,22 @@ import android.widget.Button
 import android.widget.FrameLayout
 
 internal class ScoutOperatorApplication : Application() {
-    @Volatile
-    private var updateCheckStarted = false
-
     override fun onCreate() {
         super.onCreate()
 
         registerActivityLifecycleCallbacks(
             object : ActivityLifecycleCallbacks {
                 override fun onActivityResumed(activity: Activity) {
-                    if (activity !is MainActivity) {
+                    if (
+                        activity !is MainActivity &&
+                        activity !is CredentialRecoveryActivity
+                    ) {
                         return
                     }
 
-                    installOperatorControls(activity)
-
-                    if (updateCheckStarted) {
-                        return
+                    if (activity is MainActivity) {
+                        installOperatorControls(activity)
                     }
-
-                    updateCheckStarted = true
 
                     checkForUpdate(
                         activity = activity,
