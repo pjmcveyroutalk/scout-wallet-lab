@@ -17,6 +17,10 @@
             android:exported="false" />
 
         <activity
+            android:name=".StageDProofActivity"
+            android:exported="false" />
+
+        <activity
             android:name=".CredentialRekeyActivity"
             android:exported="false" />
 
@@ -30,6 +34,10 @@
 
         <activity
             android:name=".CredentialRecoveryActivity"
+            android:exported="false" />
+
+        <activity
+            android:name=".OperatorHubActivity"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
