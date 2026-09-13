@@ -8,6 +8,7 @@ readonly STAGE_E_CORE_PATH="crates/wallet-engine/src/stage_e_preflight.rs"
 readonly SIGNING_MODULE_PATH="crates/wallet-engine/src/recovery_words.rs"
 readonly ANDROID_NATIVE_PATH="android/native/src/lib.rs"
 readonly STAGE_E_NATIVE_PATH="android/native/src/stage_e_preflight.rs"
+readonly STAGE_F_NATIVE_PATH="android/native/src/stage_f_presubmit.rs"
 readonly ANDROID_BRIDGE_PATH="android/app/src/main/java/com/routalk/scoutoperator/NativeBridge.kt"
 readonly CREDENTIAL_RECOVERY_NATIVE_PATH="android/native/src/credential_recovery.rs"
 readonly CREDENTIAL_RECOVERY_ACTIVITY_PATH="android/app/src/main/java/com/routalk/scoutoperator/CredentialRecoveryActivity.kt"
@@ -15,6 +16,7 @@ readonly CREDENTIAL_REKEY_NATIVE_PATH="android/native/src/credential_rekey.rs"
 readonly CREDENTIAL_REKEY_ACTIVITY_PATH="android/app/src/main/java/com/routalk/scoutoperator/CredentialRekeyActivity.kt"
 readonly STAGE_D_ACTIVITY_PATH="android/app/src/main/java/com/routalk/scoutoperator/StageDProofActivity.kt"
 readonly STAGE_E_ACTIVITY_PATH="android/app/src/main/java/com/routalk/scoutoperator/StageEPreflightActivity.kt"
+readonly STAGE_F_ACTIVITY_PATH="android/app/src/main/java/com/routalk/scoutoperator/StageFPresubmitActivity.kt"
 readonly OPERATOR_HUB_ACTIVITY_PATH="android/app/src/main/java/com/routalk/scoutoperator/OperatorHubActivity.kt"
 readonly ANDROID_MANIFEST_PATH="android/app/src/main/AndroidManifest.xml"
 readonly SIGNING_DESIGN_DOC="docs/DEVNET_SIGNING_BOUNDARY_V1.md"
@@ -48,6 +50,33 @@ assert_absent_in_source() {
     >/dev/null 2>&1; then
     fail "${description}"
   fi
+}
+
+assert_only_in_path() {
+  local pattern="$1"
+  local allowed_path="$2"
+  local description="$3"
+  local matches
+
+  matches="$(
+    git grep \
+      --line-number \
+      --fixed-strings \
+      -- "${pattern}" \
+      ':!scripts/security-tripwires.sh' \
+      ':!scripts/stage-f-presubmit-static-audit.sh' \
+      ':!README.md' \
+      ":!${SIGNING_DESIGN_DOC}" \
+      2>/dev/null || true
+  )"
+
+  [[ -n "${matches}" ]] || fail "${description}: required narrow capability is missing"
+
+  while IFS= read -r match; do
+    if [[ "${match}" != "${allowed_path}:"* ]]; then
+      fail "${description}: ${match}"
+    fi
+  done <<< "${matches}"
 }
 
 assert_absent_in_path() {
@@ -118,9 +147,30 @@ assert_absent_in_source \
   "https://api.mainnet-beta.solana.com" \
   "mainnet RPC endpoint must remain absent"
 
-assert_absent_in_source \
+assert_only_in_path \
   "sendTransaction" \
-  "transaction submission must remain disabled until the Devnet submission gate is explicitly opened"
+  "${STAGE_F_NATIVE_PATH}" \
+  "ledger-write RPC escaped the fixed Stage F-B Devnet boundary"
+
+assert_present_in_path \
+  'method: "sendTransaction"' \
+  "${STAGE_F_NATIVE_PATH}" \
+  "fixed Stage F-B ledger-write RPC is missing"
+
+assert_present_in_path \
+  "max_retries: 0" \
+  "${STAGE_F_NATIVE_PATH}" \
+  "Stage F-B RPC retries must remain disabled"
+
+assert_present_in_path \
+  "Cluster::Devnet.rpc_url()" \
+  "${STAGE_F_NATIVE_PATH}" \
+  "Stage F-B must remain pinned to Devnet"
+
+assert_present_in_path \
+  "STAGE_FB_PHYSICAL_SEND_ARMED = false" \
+  "${STAGE_F_ACTIVITY_PATH}" \
+  "Stage F-B physical ledger write must remain unarmed until separately authorized"
 
 echo "Checking signer boundary..."
 
@@ -169,6 +219,21 @@ assert_absent_in_path \
   "NativeBridge_signBytes" \
   "${ANDROID_NATIVE_PATH}" \
   "JNI arbitrary-byte signing export is forbidden"
+
+assert_absent_in_path \
+  "signTransaction" \
+  "${STAGE_F_NATIVE_PATH}" \
+  "generic Stage F-B transaction-signing API is forbidden"
+
+assert_absent_in_path \
+  "signMessage" \
+  "${STAGE_F_NATIVE_PATH}" \
+  "Stage F-B arbitrary-message signing API is forbidden"
+
+assert_absent_in_path \
+  "signBytes" \
+  "${STAGE_F_NATIVE_PATH}" \
+  "Stage F-B arbitrary-byte signing API is forbidden"
 
 assert_present_in_path \
   "pub mod devnet_signing_coordinator;" \
