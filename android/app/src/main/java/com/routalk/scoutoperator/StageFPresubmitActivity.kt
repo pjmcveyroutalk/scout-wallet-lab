@@ -22,6 +22,7 @@ class StageFPresubmitActivity : Activity() {
     private var passphraseField: EditText? = null
     private var confirmationField: EditText? = null
     private var authorizationAcknowledgement: CheckBox? = null
+    private var submissionAuthorizationAcknowledgement: CheckBox? = null
     private var preparedCandidateToken: String? = null
     private var preparedPublicReviewSnapshot: StageFBPublicReviewSnapshot.Snapshot? = null
 
@@ -94,14 +95,14 @@ class StageFPresubmitActivity : Activity() {
                 setPadding(padding, padding, padding, padding)
             }
 
-        root.addView(text("SCOUT STAGE F-A PRESUBMIT PROOF", 24f))
+        root.addView(text("SCOUT STAGE F DEVNET PROOF", 24f))
         root.addView(text("DEVNET ONLY", 18f))
-        root.addView(text("PRESUBMIT ONLY — NO LEDGER SUBMISSION", 14f))
+        root.addView(text("STAGE F-B PHYSICAL SEND — NOT ARMED", 14f))
         root.addView(text("MAINNET — DISABLED", 14f))
         root.addView(text("ARBITRARY SIGNING — DISABLED", 14f))
         root.addView(
             text(
-                "This gate prepares and signs only the fixed Scout Stage F Devnet Memo candidate, verifies its fee and balance floor, and simulates the exact signed bytes. It cannot submit the candidate to the ledger.",
+                "Stage F-A prepares, signs, and simulates only the fixed Scout Devnet Memo candidate. Stage F-B has a guarded one-shot submission implementation, but the physical send remains hard-disabled in this build.",
                 14f,
             ),
         )
@@ -125,7 +126,7 @@ class StageFPresubmitActivity : Activity() {
             CheckBox(this).apply {
                 text =
                     "I authorize this local Stage F-A signing + simulation presubmit proof. " +
-                        "No transaction will be submitted to the ledger."
+                        "No transaction will be submitted by this authorization."
                 isSaveEnabled = false
                 isEnabled = prerequisites.ready
                 contentDescription = "Authorize the fixed Scout Stage F-A Devnet presubmit proof"
@@ -172,7 +173,7 @@ class StageFPresubmitActivity : Activity() {
         val presubmitStatus =
             text(
                 if (prerequisites.ready) {
-                    "READY — EXPLICIT LOCAL AUTHORIZATION REQUIRED"
+                    "READY — EXPLICIT LOCAL PRESUBMIT AUTHORIZATION REQUIRED"
                 } else {
                     "BLOCKED — PREREQUISITES NOT SATISFIED"
                 },
@@ -208,13 +209,49 @@ class StageFPresubmitActivity : Activity() {
         fullWidth(discard)
         root.addView(discard)
 
+        val submissionAuthorization =
+            CheckBox(this).apply {
+                text =
+                    "I explicitly authorize exactly one Stage F-B Devnet submission attempt for " +
+                        "the reviewed fixed candidate. No retry or rebroadcast is permitted."
+                isSaveEnabled = false
+                isEnabled = false
+                contentDescription = "Authorize exactly one fixed Scout Stage F-B Devnet submission attempt"
+            }
+        submissionAuthorizationAcknowledgement = submissionAuthorization
+        root.addView(
+            submissionAuthorization,
+            ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+            ),
+        )
+
+        val submit =
+            Button(this).apply {
+                text = "STAGE F-B ONE-SHOT DEVNET SUBMISSION — NOT ARMED"
+                isEnabled = false
+                contentDescription = "Submit the reviewed fixed Stage F-B Devnet candidate exactly once"
+            }
+        fullWidth(submit)
+        root.addView(submit)
+
         val cancel =
             Button(this).apply {
                 text = "CANCEL — DO NOT PREPARE OR SUBMIT"
-                contentDescription = "Cancel the Scout Stage F-A presubmit proof"
+                contentDescription = "Cancel the Scout Stage F proof"
             }
         fullWidth(cancel)
         root.addView(cancel)
+
+        submissionAuthorization.setOnCheckedChangeListener { _, checked ->
+            submit.isEnabled =
+                STAGE_FB_PHYSICAL_SEND_ARMED &&
+                    checked &&
+                    preparedCandidateToken != null &&
+                    preparedPublicReviewSnapshot != null &&
+                    StageFBAttemptGuard(this).load() is StageFBAttemptGuard.LoadResult.Empty
+        }
 
         prepare.setOnClickListener {
             if (preparedCandidateToken != null) {
@@ -268,6 +305,8 @@ class StageFPresubmitActivity : Activity() {
                     clearSensitiveFields()
                     prepare.isEnabled = false
                     discard.isEnabled = false
+                    submit.isEnabled = false
+                    submissionAuthorization.isEnabled = false
                     cancel.isEnabled = false
                     presubmitStatus.text =
                         "PREPARING FIXED CANDIDATE AND RUNNING DEVNET SIMULATION..."
@@ -297,12 +336,16 @@ class StageFPresubmitActivity : Activity() {
                             presubmitStatus.text = result.status
                             prepare.isEnabled = prerequisites.ready && !result.success
                             discard.isEnabled = result.success
+                            submissionAuthorization.isChecked = false
+                            submissionAuthorization.isEnabled =
+                                result.success && STAGE_FB_PHYSICAL_SEND_ARMED
+                            submit.isEnabled = false
                             cancel.isEnabled = true
 
                             Toast.makeText(
                                 this,
                                 if (result.success) {
-                                    "STAGE F-A PRESUBMIT PASS — NOT SUBMITTED"
+                                    "STAGE F-A PRESUBMIT PASS — PHYSICAL SEND NOT ARMED"
                                 } else {
                                     "STAGE F-A PRESUBMIT BLOCKED / FAILED"
                                 },
@@ -319,18 +362,80 @@ class StageFPresubmitActivity : Activity() {
                 presubmitStatus.text =
                     "STAGE F-A CANDIDATE DISCARDED — NOTHING SUBMITTED"
                 discard.isEnabled = false
-                prepare.isEnabled = prerequisites.ready
+                submissionAuthorization.isChecked = false
+                submissionAuthorization.isEnabled = false
+                submit.isEnabled = false
+                prepare.isEnabled =
+                    prerequisites.ready &&
+                        StageFBAttemptGuard(this).load() is StageFBAttemptGuard.LoadResult.Empty
             } else {
                 presubmitStatus.text =
                     "DISCARD FAILED — CANDIDATE REMAINS IN MEMORY; DO NOT CONTINUE"
                 prepare.isEnabled = false
+                submissionAuthorization.isEnabled = false
+                submit.isEnabled = false
             }
+        }
+
+        submit.setOnClickListener {
+            if (!STAGE_FB_PHYSICAL_SEND_ARMED) {
+                presubmitStatus.text = "BLOCKED — STAGE F-B PHYSICAL SEND IS NOT ARMED"
+                submit.isEnabled = false
+                return@setOnClickListener
+            }
+
+            if (submissionAuthorizationAcknowledgement?.isChecked != true) {
+                presubmitStatus.text =
+                    "BLOCKED — EXPLICIT ONE-SHOT STAGE F-B SUBMISSION AUTHORIZATION REQUIRED"
+                return@setOnClickListener
+            }
+
+            val token = preparedCandidateToken
+            val snapshot = preparedPublicReviewSnapshot
+            if (token == null || snapshot == null) {
+                presubmitStatus.text = "BLOCKED — REVIEWED CANDIDATE IS NOT AVAILABLE"
+                submit.isEnabled = false
+                return@setOnClickListener
+            }
+
+            submit.isEnabled = false
+            discard.isEnabled = false
+            prepare.isEnabled = false
+            cancel.isEnabled = false
+            submissionAuthorization.isEnabled = false
+            presubmitStatus.text =
+                "STAGE F-B — PERSISTING ONE-ATTEMPT GUARD BEFORE ANY LEDGER WRITE..."
+
+            Thread {
+                val outcome = runStageFBSubmission(token, snapshot)
+
+                runOnUiThread {
+                    preparedCandidateToken = null
+                    preparedPublicReviewSnapshot = null
+                    submissionAuthorizationAcknowledgement?.isChecked = false
+                    submissionAuthorizationAcknowledgement?.isEnabled = false
+                    submit.isEnabled = false
+                    discard.isEnabled = false
+                    prepare.isEnabled =
+                        prerequisites.ready &&
+                            StageFBAttemptGuard(this).load() is StageFBAttemptGuard.LoadResult.Empty
+                    cancel.isEnabled = true
+                    presubmitStatus.text = outcome
+
+                    Toast.makeText(
+                        this,
+                        "STAGE F-B ATTEMPT TERMINAL — USE READ-ONLY RESOLUTION",
+                        Toast.LENGTH_LONG,
+                    ).show()
+                }
+            }.start()
         }
 
         cancel.setOnClickListener {
             discardPreparedCandidate()
             clearSensitiveFields()
             authorizationAcknowledgement?.isChecked = false
+            submissionAuthorizationAcknowledgement?.isChecked = false
             finish()
         }
 
@@ -352,6 +457,7 @@ class StageFPresubmitActivity : Activity() {
         discardPreparedCandidate()
         clearSensitiveFields()
         authorizationAcknowledgement?.isChecked = false
+        submissionAuthorizationAcknowledgement?.isChecked = false
         super.onStop()
     }
 
@@ -361,6 +467,7 @@ class StageFPresubmitActivity : Activity() {
         passphraseField = null
         confirmationField = null
         authorizationAcknowledgement = null
+        submissionAuthorizationAcknowledgement = null
         preparedCandidateToken = null
         preparedPublicReviewSnapshot = null
         super.onDestroy()
@@ -601,13 +708,99 @@ class StageFPresubmitActivity : Activity() {
                     append("\n\n")
                     append("IN-MEMORY CANDIDATE: HELD — NOT SUBMITTED")
                     append("\n")
-                    append("LEDGER SUBMISSION: DISABLED")
+                    append("STAGE F-B IMPLEMENTATION: READY")
+                    append("\n")
+                    append("PHYSICAL DEVNET SEND: NOT ARMED")
                     append("\n")
                     append("MAINNET: DISABLED")
                     append("\n")
                     append("ARBITRARY SIGNING: DISABLED")
                 },
         )
+    }
+
+    private fun runStageFBSubmission(
+        token: String,
+        snapshot: StageFBPublicReviewSnapshot.Snapshot,
+    ): String {
+        try {
+            if (!STAGE_FB_PHYSICAL_SEND_ARMED) {
+                return "BLOCKED — STAGE F-B PHYSICAL SEND IS NOT ARMED"
+            }
+
+            val guard = StageFBAttemptGuard(this)
+            if (guard.load() !is StageFBAttemptGuard.LoadResult.Empty) {
+                return "BLOCKED — ONE-ATTEMPT GUARD IS ALREADY PRESENT; DO NOT RETRY"
+            }
+
+            val blockHeightResult = NativeBridge.devnetBlockHeight()
+            if (!blockHeightResult.startsWith("ok:")) {
+                return "BLOCKED — CURRENT DEVNET BLOCK HEIGHT UNAVAILABLE; NOTHING SUBMITTED"
+            }
+
+            val currentBlockHeight = blockHeightResult.removePrefix("ok:").toLongOrNull()
+            if (currentBlockHeight == null || currentBlockHeight <= 0L) {
+                return "BLOCKED — CURRENT DEVNET BLOCK HEIGHT INVALID; NOTHING SUBMITTED"
+            }
+
+            if (currentBlockHeight > snapshot.metadata.lastValidBlockHeight) {
+                return "BLOCKED — REVIEWED CANDIDATE EXPIRED; NOTHING SUBMITTED"
+            }
+
+            when (
+                guard.beginAttempt(
+                    candidateFingerprintSha256 = snapshot.candidateFingerprintSha256,
+                    reviewReceiptSha256 = snapshot.reviewReceiptSha256,
+                    expectedSignature = snapshot.metadata.expectedSignature,
+                    lastValidBlockHeight = snapshot.metadata.lastValidBlockHeight,
+                )
+            ) {
+                StageFBAttemptGuard.BeginResult.STARTED_AND_PERSISTED -> Unit
+                StageFBAttemptGuard.BeginResult.ALREADY_GUARDED ->
+                    return "BLOCKED — ONE-ATTEMPT GUARD ALREADY EXISTS; DO NOT RETRY"
+                StageFBAttemptGuard.BeginResult.INVALID_PUBLIC_METADATA ->
+                    return "BLOCKED — ONE-ATTEMPT GUARD METADATA INVALID; NOTHING SUBMITTED"
+                StageFBAttemptGuard.BeginResult.PERSISTENCE_FAILED ->
+                    return "BLOCKED — ONE-ATTEMPT GUARD DID NOT PERSIST; NOTHING SUBMITTED"
+            }
+
+            val loaded = guard.load()
+            if (loaded !is StageFBAttemptGuard.LoadResult.Present) {
+                return "TERMINAL — ONE-ATTEMPT GUARD COULD NOT BE READ BACK; DO NOT SUBMIT OR RETRY"
+            }
+
+            val eligibility =
+                StageFBPreArmingEligibility.evaluate(
+                    metadata = snapshot.metadata,
+                    claimedCandidateFingerprintSha256 = snapshot.candidateFingerprintSha256,
+                    claimedReviewReceiptSha256 = snapshot.reviewReceiptSha256,
+                    guardRecord = loaded.record,
+                    currentBlockHeight = currentBlockHeight,
+                )
+            if (eligibility !is StageFBPreArmingEligibility.Result.Eligible) {
+                return "TERMINAL — REVIEWED CANDIDATE IS NOT ELIGIBLE AFTER GUARD START; DO NOT RETRY"
+            }
+
+            val nativeResult = NativeBridge.submitStageFDevnetCandidateOnce(token)
+            if (!nativeResult.startsWith("ok:")) {
+                return "STAGE F-B SUBMISSION OUTCOME TERMINAL / POSSIBLY AMBIGUOUS — $nativeResult\nDO NOT RETRY. USE READ-ONLY RESOLUTION."
+            }
+
+            val returnedSignature = nativeResult.removePrefix("ok:")
+            if (returnedSignature != eligibility.expectedSignature) {
+                return "STAGE F-B TERMINAL — RETURNED SIGNATURE MISMATCH\nDO NOT RETRY. USE READ-ONLY RESOLUTION FOR THE PERSISTED EXPECTED SIGNATURE."
+            }
+
+            return "STAGE F-B ONE-SHOT DEVNET SUBMISSION ACCEPTED\nSignature: $returnedSignature\nNO RETRY / NO REBROADCAST. USE READ-ONLY RESOLUTION."
+        } catch (error: Throwable) {
+            return "STAGE F-B TERMINAL — ${error.javaClass.simpleName}\nDO NOT RETRY. USE READ-ONLY RESOLUTION IF THE GUARD WAS PERSISTED."
+        } finally {
+            try {
+                NativeBridge.discardStageFDevnetCandidate(token)
+            } catch (_: Throwable) {
+                // Candidate is already consumed after any actual submission attempt.
+            }
+        }
     }
 
     private fun discardPreparedCandidate(): Boolean {
@@ -634,5 +827,9 @@ class StageFPresubmitActivity : Activity() {
     private fun clearSensitiveFields() {
         passphraseField?.text?.clear()
         confirmationField?.text?.clear()
+    }
+
+    private companion object {
+        const val STAGE_FB_PHYSICAL_SEND_ARMED = false
     }
 }
