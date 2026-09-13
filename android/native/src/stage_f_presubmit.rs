@@ -1,23 +1,55 @@
 use crate::{encode_hex, java_string};
+use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
 use jni::{
     objects::{JByteArray, JClass, JString},
     sys::jstring,
     JNIEnv,
 };
+use reqwest::Client;
+use serde::{Deserialize, Serialize};
+use std::time::Duration;
 use tokio::runtime::Builder;
 use wallet_engine::{
     recovery_words::{
         devnet_signing_coordinator::DevnetSigningCoordinator,
         stage_f_presubmit::{
-            discard_prepared_candidate, prepare_fixed_devnet_candidate, StageFCandidateToken,
+            discard_prepared_candidate, prepare_fixed_devnet_candidate,
+            take_prepared_candidate_wire_for_submission, StageFCandidateToken,
         },
     },
-    SecretPassphrase,
+    Cluster, DevnetRpc, SecretPassphrase,
 };
 use zeroize::Zeroizing;
 
 const STAGE_F_TOKEN_BYTES: usize = 16;
 const STAGE_F_TOKEN_HEX_LEN: usize = STAGE_F_TOKEN_BYTES * 2;
+const STAGE_FB_RPC_TIMEOUT_SECONDS: u64 = 10;
+const STAGE_FB_RPC_REQUEST_ID: u64 = 4;
+
+#[derive(Serialize)]
+struct StageFBSubmitRequest {
+    jsonrpc: &'static str,
+    id: u64,
+    method: &'static str,
+    params: (String, StageFBSubmitConfig),
+}
+
+#[derive(Serialize)]
+struct StageFBSubmitConfig {
+    encoding: &'static str,
+    #[serde(rename = "skipPreflight")]
+    skip_preflight: bool,
+    #[serde(rename = "preflightCommitment")]
+    preflight_commitment: &'static str,
+    #[serde(rename = "maxRetries")]
+    max_retries: u8,
+}
+
+#[derive(Deserialize)]
+struct StageFBSubmitResponse {
+    result: Option<String>,
+    error: Option<serde_json::Value>,
+}
 
 #[allow(unsafe_code)]
 #[no_mangle]
@@ -108,6 +140,92 @@ pub extern "system" fn Java_com_routalk_scoutoperator_NativeBridge_discardStageF
         Ok(()) => java_string(env, "ok"),
         Err(error) => java_string(env, &format!("stage-f-discard-failed:{error}")),
     }
+}
+
+#[allow(unsafe_code)]
+#[no_mangle]
+pub extern "system" fn Java_com_routalk_scoutoperator_NativeBridge_submitStageFDevnetCandidateOnce(
+    mut env: JNIEnv<'_>,
+    _class: JClass<'_>,
+    token_hex: JString<'_>,
+) -> jstring {
+    let token_hex: String = match env.get_string(&token_hex) {
+        Ok(value) => value.into(),
+        Err(_) => return java_string(env, "invalid-stage-f-token"),
+    };
+
+    let token = match decode_token(token_hex.as_str()) {
+        Some(token) => token,
+        None => return java_string(env, "invalid-stage-f-token"),
+    };
+
+    let runtime = match Builder::new_current_thread().enable_all().build() {
+        Ok(runtime) => runtime,
+        Err(_) => return java_string(env, "stage-fb-runtime-initialization-failed"),
+    };
+
+    match runtime.block_on(submit_stage_fb_candidate_once(token)) {
+        Ok(signature) => java_string(env, &format!("ok:{signature}")),
+        Err(error) => java_string(env, &format!("stage-fb-submit-failed:{error}")),
+    }
+}
+
+async fn submit_stage_fb_candidate_once(token: StageFCandidateToken) -> Result<String, &'static str> {
+    let client = Client::builder()
+        .timeout(Duration::from_secs(STAGE_FB_RPC_TIMEOUT_SECONDS))
+        .build()
+        .map_err(|_| "client-initialization-failed")?;
+
+    let block_height_rpc = DevnetRpc::new().map_err(|_| "block-height-rpc-initialization-failed")?;
+    let current_block_height = block_height_rpc
+        .get_block_height()
+        .await
+        .map_err(|_| "block-height-unavailable")?;
+
+    let wire_transaction = take_prepared_candidate_wire_for_submission(token, current_block_height)
+        .map_err(|_| "candidate-unavailable-or-expired")?;
+
+    let request = StageFBSubmitRequest {
+        jsonrpc: "2.0",
+        id: STAGE_FB_RPC_REQUEST_ID,
+        method: "sendTransaction",
+        params: (
+            BASE64.encode(wire_transaction.as_slice()),
+            StageFBSubmitConfig {
+                encoding: "base64",
+                skip_preflight: false,
+                preflight_commitment: "confirmed",
+                max_retries: 0,
+            },
+        ),
+    };
+
+    let response = client
+        .post(Cluster::Devnet.rpc_url())
+        .json(&request)
+        .send()
+        .await
+        .map_err(|_| "transport-ambiguous-terminal")?;
+
+    if !response.status().is_success() {
+        return Err("http-status-terminal");
+    }
+
+    let response = response
+        .json::<StageFBSubmitResponse>()
+        .await
+        .map_err(|_| "invalid-response-terminal")?;
+
+    if response.error.is_some() {
+        return Err("rpc-rejected-terminal");
+    }
+
+    let signature = response.result.ok_or("missing-signature-terminal")?;
+    if signature.is_empty() {
+        return Err("empty-signature-terminal");
+    }
+
+    Ok(signature)
 }
 
 fn decode_token(value: &str) -> Option<StageFCandidateToken> {
