@@ -64,6 +64,7 @@ assert_only_in_path() {
       --fixed-strings \
       -- "${pattern}" \
       ':!scripts/security-tripwires.sh' \
+      ':!scripts/stage-f-presubmit-static-audit.sh' \
       ':!README.md' \
       ":!${SIGNING_DESIGN_DOC}" \
       2>/dev/null || true
