@@ -97,12 +97,12 @@ class StageFPresubmitActivity : Activity() {
 
         root.addView(text("SCOUT STAGE F DEVNET PROOF", 24f))
         root.addView(text("DEVNET ONLY", 18f))
-        root.addView(text("STAGE F-B PHYSICAL SEND — NOT ARMED", 14f))
+        root.addView(text("STAGE F-B PHYSICAL SEND — ARMED", 14f))
         root.addView(text("MAINNET — DISABLED", 14f))
         root.addView(text("ARBITRARY SIGNING — DISABLED", 14f))
         root.addView(
             text(
-                "Stage F-A prepares, signs, and simulates only the fixed Scout Devnet Memo candidate. Stage F-B has a guarded one-shot submission implementation, but the physical send remains hard-disabled in this build.",
+                "Stage F-A prepares, signs, and simulates only the fixed Scout Devnet Memo candidate. Stage F-B is armed for exactly one guarded Devnet submission attempt of the reviewed fixed candidate, only after explicit operator authorization. No retry or rebroadcast is permitted.",
                 14f,
             ),
         )
@@ -229,7 +229,7 @@ class StageFPresubmitActivity : Activity() {
 
         val submit =
             Button(this).apply {
-                text = "STAGE F-B ONE-SHOT DEVNET SUBMISSION — NOT ARMED"
+                text = "STAGE F-B ONE-SHOT DEVNET SUBMISSION — AUTHORIZATION REQUIRED"
                 isEnabled = false
                 contentDescription = "Submit the reviewed fixed Stage F-B Devnet candidate exactly once"
             }
@@ -345,7 +345,7 @@ class StageFPresubmitActivity : Activity() {
                             Toast.makeText(
                                 this,
                                 if (result.success) {
-                                    "STAGE F-A PRESUBMIT PASS — PHYSICAL SEND NOT ARMED"
+                                    "STAGE F-A PRESUBMIT PASS — STAGE F-B ARMED; AUTHORIZATION REQUIRED"
                                 } else {
                                     "STAGE F-A PRESUBMIT BLOCKED / FAILED"
                                 },
@@ -379,7 +379,7 @@ class StageFPresubmitActivity : Activity() {
 
         submit.setOnClickListener {
             if (!STAGE_FB_PHYSICAL_SEND_ARMED) {
-                presubmitStatus.text = "BLOCKED — STAGE F-B PHYSICAL SEND IS NOT ARMED"
+                presubmitStatus.text = "BLOCKED — STAGE F-B PHYSICAL SEND ARM STATE INVALID"
                 submit.isEnabled = false
                 return@setOnClickListener
             }
@@ -710,7 +710,9 @@ class StageFPresubmitActivity : Activity() {
                     append("\n")
                     append("STAGE F-B IMPLEMENTATION: READY")
                     append("\n")
-                    append("PHYSICAL DEVNET SEND: NOT ARMED")
+                    append("PHYSICAL DEVNET SEND: ARMED — EXPLICIT OPERATOR AUTHORIZATION REQUIRED")
+                    append("\n")
+                    append("NO RETRY / NO REBROADCAST")
                     append("\n")
                     append("MAINNET: DISABLED")
                     append("\n")
@@ -725,7 +727,7 @@ class StageFPresubmitActivity : Activity() {
     ): String {
         try {
             if (!STAGE_FB_PHYSICAL_SEND_ARMED) {
-                return "BLOCKED — STAGE F-B PHYSICAL SEND IS NOT ARMED"
+                return "BLOCKED — STAGE F-B PHYSICAL SEND ARM STATE INVALID"
             }
 
             val guard = StageFBAttemptGuard(this)
@@ -830,6 +832,6 @@ class StageFPresubmitActivity : Activity() {
     }
 
     private companion object {
-        const val STAGE_FB_PHYSICAL_SEND_ARMED = false
+        const val STAGE_FB_PHYSICAL_SEND_ARMED = true
     }
 }

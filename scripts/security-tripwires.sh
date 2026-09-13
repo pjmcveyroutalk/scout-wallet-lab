@@ -168,9 +168,9 @@ assert_present_in_path \
   "Stage F-B must remain pinned to Devnet"
 
 assert_present_in_path \
-  "STAGE_FB_PHYSICAL_SEND_ARMED = false" \
+  "STAGE_FB_PHYSICAL_SEND_ARMED = true" \
   "${STAGE_F_ACTIVITY_PATH}" \
-  "Stage F-B physical ledger write must remain unarmed until separately authorized"
+  "Stage F-B physical ledger write must remain armed only in the separately authorized build"
 
 echo "Checking signer boundary..."
 
