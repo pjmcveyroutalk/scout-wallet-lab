@@ -392,7 +392,6 @@ impl CandidateStore {
         Ok(current_block_height > candidate.last_valid_block_height)
     }
 
-    #[allow(dead_code)]
     fn take_for_submission(
         &mut self,
         token: StageFCandidateToken,
@@ -516,6 +515,24 @@ pub fn prepared_candidate_is_expired(
         .lock()
         .map_err(|_| StageFPreSubmitError::CandidateRegistryUnavailable)?;
     store.is_expired(token, current_block_height)
+}
+
+pub fn take_prepared_candidate_wire_for_submission(
+    token: StageFCandidateToken,
+    current_block_height: u64,
+) -> Result<Zeroizing<Vec<u8>>, StageFPreSubmitError> {
+    let mut store = candidate_store()
+        .lock()
+        .map_err(|_| StageFPreSubmitError::CandidateRegistryUnavailable)?;
+
+    match store.take_for_submission(token, current_block_height) {
+        Ok(candidate) => Ok(candidate.wire_transaction),
+        Err(StageFPreSubmitError::CandidateExpired) => {
+            store.discard(token)?;
+            Err(StageFPreSubmitError::CandidateExpired)
+        }
+        Err(error) => Err(error),
+    }
 }
 
 fn ensure_candidate_slot_empty() -> Result<(), StageFPreSubmitError> {
