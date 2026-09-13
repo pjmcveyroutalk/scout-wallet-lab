@@ -170,13 +170,16 @@ pub extern "system" fn Java_com_routalk_scoutoperator_NativeBridge_submitStageFD
     }
 }
 
-async fn submit_stage_fb_candidate_once(token: StageFCandidateToken) -> Result<String, &'static str> {
+async fn submit_stage_fb_candidate_once(
+    token: StageFCandidateToken,
+) -> Result<String, &'static str> {
     let client = Client::builder()
         .timeout(Duration::from_secs(STAGE_FB_RPC_TIMEOUT_SECONDS))
         .build()
         .map_err(|_| "client-initialization-failed")?;
 
-    let block_height_rpc = DevnetRpc::new().map_err(|_| "block-height-rpc-initialization-failed")?;
+    let block_height_rpc =
+        DevnetRpc::new().map_err(|_| "block-height-rpc-initialization-failed")?;
     let current_block_height = block_height_rpc
         .get_block_height()
         .await
