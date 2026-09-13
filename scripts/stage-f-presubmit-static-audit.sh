@@ -115,11 +115,11 @@ grep -F 'Cluster::Devnet.rpc_url()' "${NATIVE_PATH}" >/dev/null || \
 grep -F 'transport-ambiguous-terminal' "${NATIVE_PATH}" >/dev/null || \
   fail "ambiguous Stage F-B transport outcome must remain terminal"
 
-grep -F 'STAGE F-B PHYSICAL SEND — NOT ARMED' "${ACTIVITY_PATH}" >/dev/null || \
-  fail "Stage F-B physical-send not-armed statement is missing"
+grep -F 'STAGE F-B PHYSICAL SEND — ARMED' "${ACTIVITY_PATH}" >/dev/null || \
+  fail "Stage F-B authorized armed-state statement is missing"
 
-grep -F 'STAGE_FB_PHYSICAL_SEND_ARMED = false' "${ACTIVITY_PATH}" >/dev/null || \
-  fail "Stage F-B physical send must remain hard-disabled pending separate operator authorization"
+grep -F 'STAGE_FB_PHYSICAL_SEND_ARMED = true' "${ACTIVITY_PATH}" >/dev/null || \
+  fail "Stage F-B physical send must remain armed only in the separately authorized build"
 
 grep -F 'MAINNET — DISABLED' "${ACTIVITY_PATH}" >/dev/null || \
   fail "Stage F Mainnet safety statement is missing"
