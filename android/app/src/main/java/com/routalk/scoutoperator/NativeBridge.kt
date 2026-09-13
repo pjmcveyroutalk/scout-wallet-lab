@@ -16,6 +16,7 @@ internal object NativeBridge {
     external fun simulateStageEDevnetProof(vaultJson: String, passphraseBytes: ByteArray): String
     external fun prepareStageFDevnetCandidate(vaultJson: String, passphraseBytes: ByteArray): String
     external fun discardStageFDevnetCandidate(tokenHex: String): String
+    external fun submitStageFDevnetCandidateOnce(tokenHex: String): String
     external fun createLockedDevnetVault(passphraseBytes: ByteArray): String
     external fun verifyLockedDevnetPassphrase(vaultJson: String, passphraseBytes: ByteArray): String
     external fun rekeyLockedDevnetVault(
